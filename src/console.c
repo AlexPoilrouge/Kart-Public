@@ -581,6 +581,24 @@ INT32 CON_ShiftChar(INT32 ch)
 	return ch;
 }
 
+INT32 CON_ShitAndAltGrChar(INT32 ch){
+	if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'))
+	{
+		if (shiftdown ^ capslock)
+			ch = shiftxform[ch];
+	}
+	else	// if we're holding shift we should still shift non letter symbols
+	{
+		if (shiftdown)
+			ch = shiftxform[ch];
+		else if (altdown & 0x2){
+			ch = french_altgrxform[ch];
+		}
+	}
+
+	return ch;
+}
+
 // Clear time of console heads up messages
 //
 void CON_ClearHUD(void)

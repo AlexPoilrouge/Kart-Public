@@ -1390,7 +1390,8 @@ boolean HU_Responder(event_t *ev)
 		&& ev->data1 != gamecontrol[gc_talkkey][1]))
 			return false;
 
-		c = CON_ShiftChar(c);
+		// c = CON_ShiftChar(c);
+		c = CON_ShitAndAltGrChar(c);
 
 		// pasting. pasting is cool. chat is a bit limited, though :(
 		if (((c == 'v' || c == 'V') && ctrldown) && !CHAT_MUTE)
