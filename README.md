@@ -1,3 +1,8 @@
+# Azerty-Birdhouse
+
+This version is a merge of my 'azerty' changes with the birdhouse release.
+For more info on the latter, checkout:  https://git.magicalgirl.moe/bird/Kart-Public/wikis/Current-Release
+
 # SRB2Kart
 
 [SRB2Kart](https://srb2.org/mods/) is a kart racing mod based on the 3D Sonic the Hedgehog fangame [Sonic Robo Blast 2](https://srb2.org/), based on a modified version of [Doom Legacy](http://doomlegacy.sourceforge.net/).
