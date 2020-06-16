@@ -9,6 +9,7 @@
 #include "g_game.h"
 #include "m_random.h"
 #include "p_local.h"
+#include "i_system.h"
 #include "p_slopes.h"
 #include "r_draw.h"
 #include "r_local.h"
@@ -589,6 +590,8 @@ void K_RegisterKartStuff(void)
 	CV_RegisterVar(&cv_kartdebugcheckpoint);
 	CV_RegisterVar(&cv_kartdebugnodes);
 	CV_RegisterVar(&cv_kartdebugcolorize);
+
+	CV_RegisterVar(&cv_lessflicker);
 }
 
 //}
@@ -8171,7 +8174,7 @@ static void K_drawKartFinish(void)
 
 		x = ((vid.width<<FRACBITS)/vid.dupx);
 		xval = (SHORT(kp_racefinish[pnum]->width)<<FRACBITS);
-		x = ((TICRATE - stplyr->kartstuff[k_cardanimation])*(xval > x ? xval : x))/TICRATE;
+		x = FixedMul((TICRATE - stplyr->kartstuff[k_cardanimation])*FRACUNIT, (xval > x ? xval : x))/TICRATE;
 
 		if (splitscreen && stplyr == &players[displayplayers[1]])
 			x = -x;

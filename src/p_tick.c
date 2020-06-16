@@ -784,6 +784,8 @@ void P_Ticker(boolean run)
 	// Always move the camera.
 	for (i = 0; i <= splitscreen; i++)
 	{
+		camera[i].lerp.angle = camera[i].angle;
+		camera[i].lerp.aiming = camera[i].aiming;
 		if (camera[i].chase)
 			P_MoveChaseCamera(&players[displayplayers[i]], &camera[i], false);
 	}

@@ -21,6 +21,7 @@
 #include "r_sky.h"
 #include "st_stuff.h"
 #include "p_local.h"
+#include "p_slopes.h"
 #include "keys.h"
 #include "i_video.h"
 #include "m_menu.h"
@@ -517,6 +518,73 @@ boolean R_DoCulling(line_t *cullheight, line_t *viewcullheight, fixed_t vz, fixe
 	return false;
 }
 
+void R_LerpMobjPosition(mobj_t *mo, vector3_t *pos)
+{
+	pos->x = mo->momx;
+	pos->y = mo->momy;
+	pos->z = mo->momz;
+
+	if ((mo->type == MT_SHADOW || mo->type == MT_PLAYERRETICULE) && mo->target && !P_MobjWasRemoved(mo->target))
+	{
+		R_LerpMobjPosition(mo->target, pos);
+		pos->x += mo->x - mo->target->x;
+		pos->y += mo->y - mo->target->y;
+		pos->z += mo->z - mo->target->z;
+		return;
+	}
+	else if ((
+		(!pos->x && !pos->y && !pos->z)
+		|| (mo->type == MT_ORBINAUT_SHIELD || mo->type == MT_JAWZ_SHIELD || mo->type == MT_BANANA_SHIELD || mo->type == MT_THUNDERSHIELD ||
+			mo->type == MT_ORBINAUT || mo->type == MT_ROCKETSNEAKER)
+	) && (mo->lerp.x || mo->lerp.y || mo->lerp.z))
+	{
+		pos->x = mo->x - mo->lerp.x;
+		pos->y = mo->y - mo->lerp.y;
+		pos->z = mo->z - mo->lerp.z;
+	}
+	else if (mo->standingslope)
+	{
+		if (mo->standingslope->flags & SL_NOPHYSICS)
+		{
+		   fixed_t dist = FixedMul(pos->x, mo->standingslope->d.x) +
+						  FixedMul(pos->y, mo->standingslope->d.y);
+
+		   pos->z += FixedMul(dist, mo->standingslope->zdelta);
+		}
+		else
+		{
+			P_QuantizeMomentumToSlope(pos, mo->standingslope);
+		}
+
+		if (lerp_fractic < 0 && (mo->lerp.x || mo->lerp.y || mo->lerp.z))
+		{
+			vector3_t pos2; fixed_t maxv;
+			pos2.x = mo->x - mo->lerp.x;
+			pos2.y = mo->y - mo->lerp.y;
+			pos2.z = mo->z - mo->lerp.z;
+			maxv = max(abs(pos->x), max(abs(pos->y), abs(pos->z)));
+
+			if (abs(pos2.x) <= maxv<<2 && abs(pos2.y) <= maxv<<2 && abs(pos2.z) <= maxv<<2)
+			{
+				pos->x += FixedMul(pos->x - pos2.x, lerp_fractic);
+				pos->y += FixedMul(pos->y - pos2.y, lerp_fractic);
+				pos->z += FixedMul(pos->z - pos2.z, lerp_fractic);
+			}
+		}
+	}
+
+	pos->x = mo->x + FixedMul(pos->x, lerp_fractic);
+	pos->y = mo->y + FixedMul(pos->y, lerp_fractic);
+	pos->z = mo->z + FixedMul(pos->z, lerp_fractic);
+}
+
+void R_LerpCameraPosition(camera_t *thiscam, vector3_t *pos)
+{
+	pos->x = thiscam->x + FixedMul(thiscam->x - thiscam->lerp.x, lerp_fractic);
+	pos->y = thiscam->y + FixedMul(thiscam->y - thiscam->lerp.y, lerp_fractic);
+	pos->z = thiscam->z + FixedMul(thiscam->z - thiscam->lerp.z, lerp_fractic);
+}
+
 //
 // R_InitTextureMapping
 //
@@ -846,6 +914,7 @@ void R_SkyboxFrame(player_t *player)
 {
 	camera_t *thiscam = &camera[0];
 	UINT8 i;
+	vector3_t pos;
 
 	if (splitscreen)
 	{
@@ -871,20 +940,20 @@ void R_SkyboxFrame(player_t *player)
 #endif
 	if (player->awayviewtics)
 	{
-		aimingangle = player->awayviewaiming;
-		viewangle = player->awayviewmobj->angle;
+		aimingangle = R_LerpAngle(player, awayviewaiming);
+		viewangle = ((viewmobj->flags & (MF_SCENERY|MF_NOTHINK)) && !viewmobj->lerp.angle) ? viewmobj->angle : R_LerpAngle(player->awayviewmobj, angle);
 	}
 	else if (thiscam->chase)
 	{
-		aimingangle = thiscam->aiming;
-		viewangle = thiscam->angle;
+		aimingangle = R_LerpAngle(thiscam, aiming);
+		viewangle = R_LerpAngle(thiscam, angle);
 	}
 	else
 	{
-		aimingangle = player->aiming;
-		viewangle = player->mo->angle;
+		aimingangle = R_LerpAngle(player, aiming);
+		viewangle = R_LerpAngle(player->mo, angle);
 		if (/*!demo.playback && */player->playerstate != PST_DEAD)
-		{
+		{/*NEEDS LERP*/
 			if (player == &players[consoleplayer])
 			{
 				viewangle = localangle[0]; // WARNING: camera uses this
@@ -908,8 +977,9 @@ void R_SkyboxFrame(player_t *player)
 
 	viewplayer = player;
 
-	viewx = viewmobj->x;
-	viewy = viewmobj->y;
+	R_LerpMobjPosition(viewmobj, &pos);
+	viewx = pos.x;
+	viewy = pos.y;
 	viewz = 0;
 	if (viewmobj->spawnpoint)
 		viewz = ((fixed_t)viewmobj->spawnpoint->angle)<<FRACBITS;
@@ -921,146 +991,65 @@ void R_SkyboxFrame(player_t *player)
 	if (mapheaderinfo[gamemap-1])
 	{
 		mapheader_t *mh = mapheaderinfo[gamemap-1];
+		fixed_t viewheight = 0;
+
 		if (player->awayviewtics)
 		{
-			if (skyboxmo[1])
-			{
-				fixed_t x = 0, y = 0;
-				if (mh->skybox_scalex > 0)
-					x = (player->awayviewmobj->x - skyboxmo[1]->x) / mh->skybox_scalex;
-				else if (mh->skybox_scalex < 0)
-					x = (player->awayviewmobj->x - skyboxmo[1]->x) * -mh->skybox_scalex;
-
-				if (mh->skybox_scaley > 0)
-					y = (player->awayviewmobj->y - skyboxmo[1]->y) / mh->skybox_scaley;
-				else if (mh->skybox_scaley < 0)
-					y = (player->awayviewmobj->y - skyboxmo[1]->y) * -mh->skybox_scaley;
-
-				if (viewmobj->angle == 0)
-				{
-					viewx += x;
-					viewy += y;
-				}
-				else if (viewmobj->angle == ANGLE_90)
-				{
-					viewx -= y;
-					viewy += x;
-				}
-				else if (viewmobj->angle == ANGLE_180)
-				{
-					viewx -= x;
-					viewy -= y;
-				}
-				else if (viewmobj->angle == ANGLE_270)
-				{
-					viewx += y;
-					viewy -= x;
-				}
-				else
-				{
-					angle_t ang = viewmobj->angle>>ANGLETOFINESHIFT;
-					viewx += FixedMul(x,FINECOSINE(ang)) - FixedMul(y,  FINESINE(ang));
-					viewy += FixedMul(x,  FINESINE(ang)) + FixedMul(y,FINECOSINE(ang));
-				}
-			}
-			if (mh->skybox_scalez > 0)
-				viewz += (player->awayviewmobj->z + 20*FRACUNIT) / mh->skybox_scalez;
-			else if (mh->skybox_scalez < 0)
-				viewz += (player->awayviewmobj->z + 20*FRACUNIT) * -mh->skybox_scalez;
+			R_LerpMobjPosition(player->awayviewmobj, &pos);
+			viewheight = 20*FRACUNIT;
 		}
 		else if (thiscam->chase)
 		{
-			if (skyboxmo[1])
-			{
-				fixed_t x = 0, y = 0;
-				if (mh->skybox_scalex > 0)
-					x = (thiscam->x - skyboxmo[1]->x) / mh->skybox_scalex;
-				else if (mh->skybox_scalex < 0)
-					x = (thiscam->x - skyboxmo[1]->x) * -mh->skybox_scalex;
-
-				if (mh->skybox_scaley > 0)
-					y = (thiscam->y - skyboxmo[1]->y) / mh->skybox_scaley;
-				else if (mh->skybox_scaley < 0)
-					y = (thiscam->y - skyboxmo[1]->y) * -mh->skybox_scaley;
-
-				if (viewmobj->angle == 0)
-				{
-					viewx += x;
-					viewy += y;
-				}
-				else if (viewmobj->angle == ANGLE_90)
-				{
-					viewx -= y;
-					viewy += x;
-				}
-				else if (viewmobj->angle == ANGLE_180)
-				{
-					viewx -= x;
-					viewy -= y;
-				}
-				else if (viewmobj->angle == ANGLE_270)
-				{
-					viewx += y;
-					viewy -= x;
-				}
-				else
-				{
-					angle_t ang = viewmobj->angle>>ANGLETOFINESHIFT;
-					viewx += FixedMul(x,FINECOSINE(ang)) - FixedMul(y,  FINESINE(ang));
-					viewy += FixedMul(x,  FINESINE(ang)) + FixedMul(y,FINECOSINE(ang));
-				}
-			}
-			if (mh->skybox_scalez > 0)
-				viewz += (thiscam->z + (thiscam->height>>1)) / mh->skybox_scalez;
-			else if (mh->skybox_scalez < 0)
-				viewz += (thiscam->z + (thiscam->height>>1)) * -mh->skybox_scalez;
+			R_LerpCameraPosition(thiscam, &pos);
+			viewheight = thiscam->height >> 1;
 		}
 		else
-		{
-			if (skyboxmo[1])
-			{
-				fixed_t x = 0, y = 0;
-				if (mh->skybox_scalex > 0)
-					x = (player->mo->x - skyboxmo[1]->x) / mh->skybox_scalex;
-				else if (mh->skybox_scalex < 0)
-					x = (player->mo->x - skyboxmo[1]->x) * -mh->skybox_scalex;
-				if (mh->skybox_scaley > 0)
-					y = (player->mo->y - skyboxmo[1]->y) / mh->skybox_scaley;
-				else if (mh->skybox_scaley < 0)
-					y = (player->mo->y - skyboxmo[1]->y) * -mh->skybox_scaley;
+			R_LerpMobjPosition(player->mo, &pos);
 
-				if (viewmobj->angle == 0)
-				{
-					viewx += x;
-					viewy += y;
-				}
-				else if (viewmobj->angle == ANGLE_90)
-				{
-					viewx -= y;
-					viewy += x;
-				}
-				else if (viewmobj->angle == ANGLE_180)
-				{
-					viewx -= x;
-					viewy -= y;
-				}
-				else if (viewmobj->angle == ANGLE_270)
-				{
-					viewx += y;
-					viewy -= x;
-				}
-				else
-				{
-					angle_t ang = viewmobj->angle>>ANGLETOFINESHIFT;
-					viewx += FixedMul(x,FINECOSINE(ang)) - FixedMul(y,  FINESINE(ang));
-					viewy += FixedMul(x,  FINESINE(ang)) + FixedMul(y,FINECOSINE(ang));
-				}
+		if (skyboxmo[1])
+		{
+			fixed_t x = 0, y = 0;
+			if (mh->skybox_scalex > 0)
+				x = (pos.x - skyboxmo[1]->x) / mh->skybox_scalex;
+			else if (mh->skybox_scalex < 0)
+				x = (pos.x - skyboxmo[1]->x) * -mh->skybox_scalex;
+
+			if (mh->skybox_scaley > 0)
+				y = (pos.y - skyboxmo[1]->y) / mh->skybox_scaley;
+			else if (mh->skybox_scaley < 0)
+				y = (pos.y - skyboxmo[1]->y) * -mh->skybox_scaley;
+
+			if (viewmobj->angle == 0)
+			{
+				viewx += x;
+				viewy += y;
 			}
-			if (mh->skybox_scalez > 0)
-				viewz += player->viewz / mh->skybox_scalez;
-			else if (mh->skybox_scalez < 0)
-				viewz += player->viewz * -mh->skybox_scalez;
+			else if (viewmobj->angle == ANGLE_90)
+			{
+				viewx -= y;
+				viewy += x;
+			}
+			else if (viewmobj->angle == ANGLE_180)
+			{
+				viewx -= x;
+				viewy -= y;
+			}
+			else if (viewmobj->angle == ANGLE_270)
+			{
+				viewx += y;
+				viewy -= x;
+			}
+			else
+			{
+				angle_t ang = R_LerpAngle(viewmobj, angle)>>ANGLETOFINESHIFT;
+				viewx += FixedMul(x,FINECOSINE(ang)) - FixedMul(y,  FINESINE(ang));
+				viewy += FixedMul(x,  FINESINE(ang)) + FixedMul(y,FINECOSINE(ang));
+			}
 		}
+		if (mh->skybox_scalez > 0)
+			viewz += (pos.z + viewheight) / mh->skybox_scalez;
+		else if (mh->skybox_scalez < 0)
+			viewz += (pos.z + viewheight) * -mh->skybox_scalez;
 	}
 
 	if (viewmobj->subsector)
@@ -1078,6 +1067,7 @@ void R_SetupFrame(player_t *player, boolean skybox)
 {
 	camera_t *thiscam;
 	boolean chasecam = false;
+	vector3_t pos;
 
 	if (splitscreen > 2 && player == &players[displayplayers[3]])
 	{
@@ -1119,31 +1109,46 @@ void R_SetupFrame(player_t *player, boolean skybox)
 		// cut-away view stuff
 		viewmobj = player->awayviewmobj; // should be a MT_ALTVIEWMAN
 		I_Assert(viewmobj != NULL);
-		viewz = viewmobj->z + 20*FRACUNIT;
-		aimingangle = player->awayviewaiming;
-		viewangle = viewmobj->angle;
+		viewz = 20*FRACUNIT;
+		aimingangle = R_LerpAngle(player, awayviewaiming);
+		viewangle = ((viewmobj->flags & (MF_SCENERY|MF_NOTHINK)) && !viewmobj->lerp.angle) ? viewmobj->angle : R_LerpAngle(viewmobj, angle);
+		R_LerpMobjPosition(viewmobj, &pos);
 	}
 	else if (!player->spectator && chasecam)
 	// use outside cam view
 	{
 		viewmobj = NULL;
-		viewz = thiscam->z + (thiscam->height>>1);
-		aimingangle = thiscam->aiming;
-		viewangle = thiscam->angle;
+		viewz = (thiscam->height>>1);
+		if (demo.freecam)
+		{
+			pos.x = thiscam->x;
+			pos.y = thiscam->y;
+			pos.z = thiscam->z;
+			aimingangle = thiscam->aiming;
+			viewangle = thiscam->angle;
+		}
+		else
+		{
+			aimingangle = R_LerpAngle(thiscam, aiming);
+			viewangle = R_LerpAngle(thiscam, angle);
+			R_LerpCameraPosition(thiscam, &pos);
+		}
 	}
 	else
 	// use the player's eyes view
 	{
-		viewz = player->viewz;
 
 		viewmobj = player->mo;
 		I_Assert(viewmobj != NULL);
 
-		aimingangle = player->aiming;
-		viewangle = viewmobj->angle;
+		viewz = player->viewz - player->mo->z;
+		R_LerpMobjPosition(viewmobj, &pos);
+
+		aimingangle = R_LerpAngle(player, aiming);
+		viewangle = R_LerpAngle(viewmobj, angle);
 
 		if (!demo.playback && player->playerstate != PST_DEAD)
-		{
+		{/* NEEDS LERP */
 			if (player == &players[consoleplayer])
 			{
 				viewangle = localangle[0]; // WARNING: camera uses this
@@ -1164,34 +1169,14 @@ void R_SetupFrame(player_t *player, boolean skybox)
 			}
 		}
 	}
-	viewz += quake.z;
 
 	viewplayer = player;
 
-	if (chasecam && !player->awayviewtics && !player->spectator)
-	{
-		viewx = thiscam->x;
-		viewy = thiscam->y;
-		viewx += quake.x;
-		viewy += quake.y;
+	viewx = pos.x + quake.x;
+	viewy = pos.y + quake.y;
+	viewz += pos.z + quake.z;
 
-		if (thiscam->subsector && thiscam->subsector->sector)
-			viewsector = thiscam->subsector->sector;
-		else
-			viewsector = R_PointInSubsector(viewx, viewy)->sector;
-	}
-	else
-	{
-		viewx = viewmobj->x;
-		viewy = viewmobj->y;
-		viewx += quake.x;
-		viewy += quake.y;
-
-		if (viewmobj->subsector && thiscam->subsector->sector)
-			viewsector = viewmobj->subsector->sector;
-		else
-			viewsector = R_PointInSubsector(viewx, viewy)->sector;
-	}
+	viewsector = R_PointInSubsector(viewx, viewy)->sector;
 
 	viewsin = FINESINE(viewangle>>ANGLETOFINESHIFT);
 	viewcos = FINECOSINE(viewangle>>ANGLETOFINESHIFT);

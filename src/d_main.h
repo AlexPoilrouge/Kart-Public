@@ -14,11 +14,13 @@
 #ifndef __D_MAIN__
 #define __D_MAIN__
 
+#include "m_fixed.h"
 #include "d_event.h"
 #include "w_wad.h"   // for MAX_WADFILES
 
 extern boolean advancedemo;
 
+extern fixed_t lerp_fractic; extern boolean lerp_sameframe;
 // make sure not to write back the config until it's been correctly loaded
 extern tic_t rendergametic;
 

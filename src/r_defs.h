@@ -393,6 +393,13 @@ typedef struct sector_s
 	// flag angles sector spawned with (via linedef type 7)
 	angle_t spawn_flrpic_angle;
 	angle_t spawn_ceilpic_angle;
+
+	struct {
+		fixed_t floor_xoffs, floor_yoffs;
+		tic_t floor_leveltime;
+		fixed_t ceiling_xoffs, ceiling_yoffs;
+		tic_t ceiling_leveltime;
+	} lerp;
 } sector_t;
 
 //
@@ -468,6 +475,11 @@ typedef struct
 	INT16 repeatcnt; // # of times to repeat midtexture
 
 	char *text; // a concatination of all top, bottom, and mid texture names, for linedef specials that require a string.
+
+	struct {
+		fixed_t textureoffset, rowoffset;
+		tic_t leveltime;
+	} lerp;
 } side_t;
 
 //

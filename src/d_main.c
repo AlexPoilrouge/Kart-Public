@@ -50,6 +50,7 @@ int	snprintf(char *str, size_t n, const char *fmt, ...);
 #include "hu_stuff.h"
 #include "i_sound.h"
 #include "i_system.h"
+#include "i_threads.h"
 #include "i_video.h"
 #include "m_argv.h"
 #include "m_menu.h"
@@ -196,6 +197,8 @@ void D_ProcessEvents(void)
 {
 	event_t *ev;
 
+	boolean eaten;
+
 	for (; eventtail != eventhead; eventtail = (eventtail+1) & (MAXEVENTS-1))
 	{
 		ev = &events[eventtail];
@@ -217,7 +220,17 @@ void D_ProcessEvents(void)
 		}
 
 		// Menu input
-		if (M_Responder(ev))
+#ifdef HAVE_THREADS
+		I_lock_mutex(&m_menu_mutex);
+#endif
+		{
+			eaten = M_Responder(ev);
+		}
+#ifdef HAVE_THREADS
+		I_unlock_mutex(m_menu_mutex);
+#endif
+
+		if (eaten)
 			continue; // menu ate the event
 
 		// Demo input:
@@ -226,7 +239,17 @@ void D_ProcessEvents(void)
 				continue;	// demo ate the event
 
 		// console input
-		if (CON_Responder(ev))
+#ifdef HAVE_THREADS
+		I_lock_mutex(&con_mutex);
+#endif
+		{
+			eaten = CON_Responder(ev);
+		}
+#ifdef HAVE_THREADS
+		I_unlock_mutex(con_mutex);
+#endif
+
+		if (eaten)
 			continue; // ate the event
 
 		G_Responder(ev);
@@ -242,7 +265,7 @@ void D_ProcessEvents(void)
 // added comment : there is a wipe eatch change of the gamestate
 gamestate_t wipegamestate = GS_LEVEL;
 
-static void D_Display(void)
+static boolean D_Display(void)
 {
 	boolean forcerefresh = false;
 	static boolean wipe = false;
@@ -252,7 +275,20 @@ static void D_Display(void)
 	if (!dedicated)
 	{
 		if (nodrawers)
-			return; // for comparative timing/profiling
+			return false; // for comparative timing/profiling
+		if (cv_interpolationmode.value == 1)
+		{
+			static UINT16 frame = 0;
+			UINT16 newframe = I_GetFrameReference(cv_frameratecap.value);
+
+			if (newframe == frame)
+			{
+				I_Sleep();// Sleep in main loop now only happens in 35 fps mode, so sleep here to avoid a full busy loop
+				return false;
+			}
+
+			frame = newframe;
+		}
 
 		// check for change of screen size (video mode)
 		if (setmodeneeded && !wipe)
@@ -317,7 +353,7 @@ static void D_Display(void)
 	}
 
 	if (dedicated) //bail out after wipe logic
-		return;
+		return false;
 
 	// do buffered drawing
 	switch (gamestate)
@@ -522,7 +558,13 @@ static void D_Display(void)
 	if (gamestate != GS_TIMEATTACK)
 		CON_Drawer();
 
+#ifdef HAVE_THREADS
+	I_lock_mutex(&m_menu_mutex);
+#endif
 	M_Drawer(); // menu is drawn even on top of everything
+#ifdef HAVE_THREADS
+	I_unlock_mutex(m_menu_mutex);
+#endif
 	// focus lost moved to M_Drawer
 
 	//
@@ -555,6 +597,7 @@ static void D_Display(void)
 	//
 	if (!wipe)
 	{
+
 		if (cv_netstat.value)
 		{
 			char s[50];
@@ -575,14 +618,35 @@ static void D_Display(void)
 		if (cv_shittyscreen.value)
 			V_DrawVhsEffect(cv_shittyscreen.value == 2);
 
+		/*{
+			// lerp time graph
+			static fixed_t graph[120];
+			static boolean sameframe[120];
+			static UINT8 index = 0;
+			UINT8 i, j;
+
+			index++; index %= 120;
+			graph[index] = lerp_fractic;
+			sameframe[index] = lerp_sameframe;
+
+			for (i = (index+1)%120, j = 0; j < 120; i = (i+1)%120, j++)
+			{
+				V_DrawFill(j, 100 - FixedMul(max(graph[i], graph[(i+119)%120]), 100), 1, FixedMul(abs(graph[i] - graph[(i+119)%120]), 100), 10);
+				V_DrawFill(j, 99 - FixedMul(graph[i], 100), 1, 3, sameframe[i] ? 128 : 161);
+			}
+		}*/
+
 		I_FinishUpdate(); // page flip or blit buffer
 	}
+
+	return true;
 }
 
 // =========================================================================
 // D_SRB2Loop
 // =========================================================================
 
+tic_t lerp_currenttic = 0; fixed_t lerp_fractic; boolean lerp_sameframe;
 tic_t rendergametic;
 
 void D_SRB2Loop(void)
@@ -644,11 +708,50 @@ void D_SRB2Loop(void)
 				debugload--;
 #endif
 
+		if (demo.playback && gamestate == GS_LEVEL)
+		{
+			static fixed_t oldlerp = 0;
+			fixed_t lerp = I_GetFracTime();
+			realtics = realtics * cv_playbackspeed.value;
+			oldlerp = lerp;
+		}
+
 		if (!realtics && !singletics)
 		{
-			I_Sleep();
+			//I_Sleep();//test
+			if (cv_interpolationmode.value != 0 && gamestate == GS_LEVEL && !(paused || P_AutoPause())) //turn off interpolation when paused
+			{
+				if (rendertimeout == entertic+TICRATE/17)
+				{
+					fixed_t old = lerp_fractic;
+
+					if (demo.playback && gamestate == GS_LEVEL)
+						lerp_fractic = (I_GetFracTime() * cv_playbackspeed.value) % FRACUNIT - cv_extrapolation.value;
+					else
+						lerp_fractic = I_GetFracTime() - cv_extrapolation.value;
+
+					while (lerp_fractic < old)
+						lerp_fractic += FRACUNIT;
+				}
+
+				if (D_Display())
+				{
+					if (moviemode)
+						if (!lerp_sameframe || (cv_gifrecordinterpolatedframes.value && lerp_sameframe))
+							M_SaveFrame();
+					if (takescreenshot) // Only take screenshots after drawing.
+						M_DoScreenShot();
+
+					lerp_sameframe = true;
+				}
+			}
+			else
+				I_Sleep();// Only sleep here in 35 fps mode. Frame rate cap has a separate sleep in D_Display.
+
 			continue;
 		}
+
+		lerp_sameframe = false;
 
 #ifdef HW3SOUND
 		HW3S_BeginFrameUpdate();
@@ -668,21 +771,39 @@ void D_SRB2Loop(void)
 			rendertimeout = entertic+TICRATE/17;
 
 			// Update display, next frame, with current state.
-			D_Display();
+			if (cv_interpolationmode.value == 0 || (paused || P_AutoPause()))
+				lerp_fractic = 0;
+			else if (demo.playback && gamestate == GS_LEVEL)
+				lerp_fractic = (I_GetFracTime() * cv_playbackspeed.value) % FRACUNIT - cv_extrapolation.value;
+			else
+				lerp_fractic = I_GetFracTime() - cv_extrapolation.value;
+			if (D_Display())
+			{
+				if (moviemode)
+					if (!lerp_sameframe || (cv_gifrecordinterpolatedframes.value && lerp_sameframe))
+						M_SaveFrame();
+				if (takescreenshot) // Only take screenshots after drawing.
+					M_DoScreenShot();
 
-			if (moviemode)
-				M_SaveFrame();
-			if (takescreenshot) // Only take screenshots after drawing.
-				M_DoScreenShot();
+				lerp_sameframe = true;
+			}
 		}
 		else if (rendertimeout < entertic) // in case the server hang or netsplit
 		{
-			D_Display();
+			lerp_fractic = FRACUNIT - cv_extrapolation.value;
 
-			if (moviemode)
-				M_SaveFrame();
-			if (takescreenshot) // Only take screenshots after drawing.
-				M_DoScreenShot();
+			if (D_Display())
+			{
+				//CONS_Printf("Hang part got run!\n");
+
+				if (moviemode)
+					if (!lerp_sameframe || (cv_gifrecordinterpolatedframes.value && lerp_sameframe))
+						M_SaveFrame();
+				if (takescreenshot) // Only take screenshots after drawing.
+					M_DoScreenShot();
+
+				lerp_sameframe = true;
+			}
 		}
 
 		// consoleplayer -> displayplayers (hear sounds from viewpoint)

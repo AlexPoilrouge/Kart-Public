@@ -6856,18 +6856,42 @@ void T_Scroll(scroll_t *s)
 
 		case sc_side: // scroll wall texture
 			side = sides + s->affectee;
+
+			if (side->lerp.leveltime != leveltime)
+			{
+				side->lerp.leveltime = leveltime;
+				side->lerp.textureoffset = side->textureoffset;
+				side->lerp.rowoffset = side->rowoffset;
+			}
+
 			side->textureoffset += dx;
 			side->rowoffset += dy;
 			break;
 
 		case sc_floor: // scroll floor texture
 			sec = sectors + s->affectee;
+
+			if (sec->lerp.floor_leveltime != leveltime)
+			{
+				sec->lerp.floor_leveltime = leveltime;
+				sec->lerp.floor_xoffs = sec->floor_xoffs;
+				sec->lerp.floor_yoffs = sec->floor_yoffs;
+			}
+
 			sec->floor_xoffs += dx;
 			sec->floor_yoffs += dy;
 			break;
 
 		case sc_ceiling: // scroll ceiling texture
 			sec = sectors + s->affectee;
+
+			if (sec->lerp.ceiling_leveltime != leveltime)
+			{
+				sec->lerp.ceiling_leveltime = leveltime;
+				sec->lerp.ceiling_xoffs = sec->ceiling_xoffs;
+				sec->lerp.ceiling_yoffs = sec->ceiling_yoffs;
+			}
+
 			sec->ceiling_xoffs += dx;
 			sec->ceiling_yoffs += dy;
 			break;

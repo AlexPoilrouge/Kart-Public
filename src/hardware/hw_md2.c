@@ -1075,12 +1075,15 @@ void HWR_DrawMD2(gr_vissprite_t *spr)
 	INT32 nextFrame = -1;
 	FTransform p;
 	FSurfaceInfo Surf;
+	vector3_t pos;
 
 	if (!cv_grmdls.value)
 		return;
 
 	if (spr->precip)
 		return;
+
+	R_LerpMobjPosition(spr->mobj, &pos);
 
 	// MD2 colormap fix
 	// colormap test
@@ -1094,7 +1097,7 @@ void HWR_DrawMD2(gr_vissprite_t *spr)
 		{
 			INT32 light;
 
-			light = R_GetPlaneLight(sector, spr->mobj->z + spr->mobj->height, false); // Always use the light at the top instead of whatever I was doing before
+			light = R_GetPlaneLight(sector, pos.z + spr->mobj->height, false); // Always use the light at the top instead of whatever I was doing before
 
 			if (!(spr->mobj->frame & FF_FULLBRIGHT))
 				lightlevel = *sector->lightlist[light].lightlevel;
@@ -1265,13 +1268,13 @@ void HWR_DrawMD2(gr_vissprite_t *spr)
 #endif
 
 		//Hurdler: it seems there is still a small problem with mobj angle
-		p.x = FIXED_TO_FLOAT(spr->mobj->x);
-		p.y = FIXED_TO_FLOAT(spr->mobj->y)+md2->offset;
+		p.x = FIXED_TO_FLOAT(pos.x);
+		p.y = FIXED_TO_FLOAT(pos.y)+md2->offset;
 
 		if (spr->mobj->eflags & MFE_VERTICALFLIP)
-			p.z = FIXED_TO_FLOAT(spr->mobj->z + spr->mobj->height);
+			p.z = FIXED_TO_FLOAT(pos.z + spr->mobj->height);
 		else
-			p.z = FIXED_TO_FLOAT(spr->mobj->z);
+			p.z = FIXED_TO_FLOAT(pos.z);
 
 		if (spr->mobj->skin && spr->mobj->sprite == SPR_PLAY)
 			sprdef = &((skin_t *)spr->mobj->skin)->spritedef;
@@ -1284,14 +1287,27 @@ void HWR_DrawMD2(gr_vissprite_t *spr)
 		{
 			fixed_t anglef;
 			if (spr->mobj->player)
-				anglef = AngleFixed(spr->mobj->player->frameangle);
-			else
+			{
+				unsigned f = spr->mobj->frame & FF_FRAMEMASK;
+				anglef = AngleFixed(R_LerpAngle(spr->mobj->player, frameangle));
+
+				// Smooth drifting rotations
+				if (f == 14 || f == 15)
+					anglef += 45*FRACUNIT;
+				else if (f == 12 || f == 13)
+					anglef -= 45*FRACUNIT;
+				anglef += spr->mobj->player->kartstuff[k_drift] * 9*FRACUNIT;
+			}
+			else if (spr->mobj->flags & (MF_NOTHINK|MF_SCENERY))
 				anglef = AngleFixed(spr->mobj->angle);
+			else
+				anglef = AngleFixed(R_LerpAngle(spr->mobj, angle));
+
 			p.angley = FIXED_TO_FLOAT(anglef);
 		}
 		else
 		{
-			const fixed_t anglef = AngleFixed((R_PointToAngle(spr->mobj->x, spr->mobj->y))-ANGLE_180);
+			const fixed_t anglef = AngleFixed((R_PointToAngle(pos.x, pos.y))-ANGLE_180);
 			p.angley = FIXED_TO_FLOAT(anglef);
 		}
 		p.anglex = 0.0f;

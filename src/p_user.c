@@ -7483,6 +7483,13 @@ void P_ResetCamera(player_t *player, camera_t *thiscam)
 	thiscam->height = 16*FRACUNIT;
 
 	while (!P_MoveChaseCamera(player,thiscam,true) && ++tries < 2*TICRATE);
+
+	// Don't lerp from the old position!
+	thiscam->lerp.x = thiscam->x;
+	thiscam->lerp.y = thiscam->y;
+	thiscam->lerp.z = thiscam->z;
+	thiscam->lerp.angle = thiscam->angle;
+	thiscam->lerp.aiming = thiscam->aiming;
 }
 
 boolean P_MoveChaseCamera(player_t *player, camera_t *thiscam, boolean resetcalled)
@@ -8316,6 +8323,10 @@ void P_PlayerThink(player_t *player)
 {
 	ticcmd_t *cmd;
 	const size_t playeri = (size_t)(player - players);
+
+	player->lerp.aiming = player->aiming;
+	player->lerp.awayviewaiming = player->awayviewaiming;
+	player->lerp.frameangle = player->frameangle;
 
 #ifdef PARANOIA
 	if (!player->mo)

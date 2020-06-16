@@ -12,6 +12,7 @@
 /// \brief BSP traversal, handling of LineSegs for rendering
 
 #include "doomdef.h"
+#include "d_main.h"
 #include "g_game.h"
 #include "r_local.h"
 #include "r_state.h"
@@ -287,6 +288,10 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 			tempsec->floor_yoffs = s->floor_yoffs;
 			tempsec->floorpic_angle = s->floorpic_angle;
 
+			tempsec->lerp.floor_xoffs = s->lerp.floor_xoffs;
+			tempsec->lerp.floor_yoffs = s->lerp.floor_yoffs;
+			tempsec->lerp.floor_leveltime = s->lerp.floor_leveltime;
+
 			if (underwater)
 			{
 				if (s->ceilingpic == skyflatnum)
@@ -296,6 +301,10 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 					tempsec->ceiling_xoffs = tempsec->floor_xoffs;
 					tempsec->ceiling_yoffs = tempsec->floor_yoffs;
 					tempsec->ceilingpic_angle = tempsec->floorpic_angle;
+
+					tempsec->lerp.ceiling_xoffs = tempsec->lerp.floor_xoffs;
+					tempsec->lerp.ceiling_yoffs = tempsec->lerp.floor_yoffs;
+					tempsec->lerp.ceiling_leveltime = tempsec->lerp.floor_leveltime;
 				}
 				else
 				{
@@ -303,6 +312,10 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 					tempsec->ceiling_xoffs = s->ceiling_xoffs;
 					tempsec->ceiling_yoffs = s->ceiling_yoffs;
 					tempsec->ceilingpic_angle = s->ceilingpic_angle;
+
+					tempsec->lerp.ceiling_xoffs = s->lerp.ceiling_xoffs;
+					tempsec->lerp.ceiling_yoffs = s->lerp.ceiling_yoffs;
+					tempsec->lerp.ceiling_leveltime = s->lerp.ceiling_leveltime;
 				}
 				mapnum = s->bottommap;
 			}
@@ -323,10 +336,14 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 			tempsec->ceilingheight = s->ceilingheight;
 			tempsec->floorheight = s->ceilingheight + 1;
 
-			tempsec->floorpic = tempsec->ceilingpic = s->ceilingpic;
-			tempsec->floor_xoffs = tempsec->ceiling_xoffs = s->ceiling_xoffs;
-			tempsec->floor_yoffs = tempsec->ceiling_yoffs = s->ceiling_yoffs;
-			tempsec->floorpic_angle = tempsec->ceilingpic_angle = s->ceilingpic_angle;
+			tempsec->ceilingpic = s->ceilingpic;
+			tempsec->ceiling_xoffs = s->ceiling_xoffs;
+			tempsec->ceiling_yoffs = s->ceiling_yoffs;
+			tempsec->ceilingpic_angle = s->ceilingpic_angle;
+
+			tempsec->lerp.ceiling_xoffs = s->lerp.ceiling_xoffs;
+			tempsec->lerp.ceiling_yoffs = s->lerp.ceiling_yoffs;
+			tempsec->lerp.ceiling_leveltime = s->lerp.ceiling_leveltime;
 
 			mapnum = s->topmap;
 
@@ -337,6 +354,10 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 				tempsec->floor_xoffs = tempsec->ceiling_xoffs;
 				tempsec->floor_yoffs = tempsec->ceiling_yoffs;
 				tempsec->floorpic_angle = tempsec->ceilingpic_angle;
+
+				tempsec->lerp.floor_xoffs = tempsec->lerp.ceiling_xoffs;
+				tempsec->lerp.floor_yoffs = tempsec->lerp.ceiling_yoffs;
+				tempsec->lerp.floor_leveltime = tempsec->lerp.ceiling_leveltime;
 			}
 			else
 			{
@@ -345,6 +366,10 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec, INT32 *floorlightlevel,
 				tempsec->floor_xoffs = s->floor_xoffs;
 				tempsec->floor_yoffs = s->floor_yoffs;
 				tempsec->floorpic_angle = s->floorpic_angle;
+
+				tempsec->lerp.floor_xoffs = s->lerp.floor_xoffs;
+				tempsec->lerp.floor_yoffs = s->lerp.floor_yoffs;
+				tempsec->lerp.floor_leveltime = s->lerp.floor_leveltime;
 			}
 
 			tempsec->lightlevel = s->lightlevel;
@@ -902,8 +927,21 @@ static void R_Subsector(size_t num)
 		frontsector->floorheight) < viewz || (frontsector->heightsec != -1
 		&& sectors[frontsector->heightsec].ceilingpic == skyflatnum)))
 	{
+		fixed_t xoffs, yoffs;
+
+		if (frontsector->lerp.floor_leveltime)
+		{
+			xoffs = R_LerpAngle(frontsector, floor_xoffs);
+			yoffs = R_LerpAngle(frontsector, floor_yoffs);
+		}
+		else
+		{
+			xoffs = frontsector->floor_xoffs;
+			yoffs = frontsector->floor_yoffs;
+		}
+
 		floorplane = R_FindPlane(frontsector->floorheight, frontsector->floorpic, floorlightlevel,
-			frontsector->floor_xoffs, frontsector->floor_yoffs, frontsector->floorpic_angle, floorcolormap, NULL
+			xoffs, yoffs, frontsector->floorpic_angle, floorcolormap, NULL
 #ifdef POLYOBJECTS_PLANES
 			, NULL
 #endif
@@ -923,8 +961,21 @@ static void R_Subsector(size_t num)
 		|| (frontsector->heightsec != -1
 		&& sectors[frontsector->heightsec].floorpic == skyflatnum)))
 	{
+		fixed_t xoffs, yoffs;
+
+		if (frontsector->lerp.ceiling_leveltime)
+		{
+			xoffs = R_LerpAngle(frontsector, ceiling_xoffs);
+			yoffs = R_LerpAngle(frontsector, ceiling_yoffs);
+		}
+		else
+		{
+			xoffs = frontsector->ceiling_xoffs;
+			yoffs = frontsector->ceiling_yoffs;
+		}
+
 		ceilingplane = R_FindPlane(frontsector->ceilingheight, frontsector->ceilingpic,
-			ceilinglightlevel, frontsector->ceiling_xoffs, frontsector->ceiling_yoffs, frontsector->ceilingpic_angle,
+			ceilinglightlevel, xoffs, yoffs, frontsector->ceilingpic_angle,
 			ceilingcolormap, NULL
 #ifdef POLYOBJECTS_PLANES
 			, NULL

@@ -13,6 +13,7 @@
 
 #include "doomdef.h"
 #include "console.h"
+#include "d_main.h" // lerp_fractic
 #include "g_game.h"
 #include "r_local.h"
 #include "st_stuff.h"
@@ -1164,9 +1165,13 @@ static void R_ProjectSprite(mobj_t *thing)
 
 	fixed_t ang_scale = FRACUNIT;
 
+	vector3_t pos;
+
+	R_LerpMobjPosition(thing, &pos);
+
 	// transform the origin point
-	tr_x = thing->x - viewx;
-	tr_y = thing->y - viewy;
+	tr_x = pos.x - viewx;
+	tr_y = pos.y - viewy;
 
 	gxt = FixedMul(tr_x, viewcos);
 	gyt = -FixedMul(tr_y, viewsin);
@@ -1232,9 +1237,11 @@ static void R_ProjectSprite(mobj_t *thing)
 	if (sprframe->rotate != SRF_SINGLE || papersprite)
 	{
 		if (thing->player)
-			ang = R_PointToAngle (thing->x, thing->y) - thing->player->frameangle;
+			ang = R_PointToAngle(pos.x, pos.y) - R_LerpAngle(thing->player, frameangle);
+		else if (thing->flags & (MF_NOTHINK|MF_SCENERY))
+			ang = R_PointToAngle(pos.x, pos.y) - thing->angle;
 		else
-			ang = R_PointToAngle (thing->x, thing->y) - thing->angle;
+			ang = R_PointToAngle(pos.x, pos.y) - R_LerpAngle(thing, angle);
 		if (papersprite)
 			ang_scale = abs(FINESINE(ang>>ANGLETOFINESHIFT));
 	}
@@ -1355,12 +1362,12 @@ static void R_ProjectSprite(mobj_t *thing)
 		// When vertical flipped, draw sprites from the top down, at least as far as offsets are concerned.
 		// sprite height - sprite topoffset is the proper inverse of the vertical offset, of course.
 		// remember gz and gzt should be seperated by sprite height, not thing height - thing height can be shorter than the sprite itself sometimes!
-		gz = thing->z + thing->height - FixedMul(spritecachedinfo[lump].topoffset, this_scale);
+		gz = pos.z + thing->height - FixedMul(spritecachedinfo[lump].topoffset, this_scale);
 		gzt = gz + FixedMul(spritecachedinfo[lump].height, this_scale);
 	}
 	else
 	{
-		gzt = thing->z + FixedMul(spritecachedinfo[lump].topoffset, this_scale);
+		gzt = pos.z + FixedMul(spritecachedinfo[lump].topoffset, this_scale);
 		gz = gzt - FixedMul(spritecachedinfo[lump].height, this_scale);
 	}
 
@@ -1422,12 +1429,12 @@ static void R_ProjectSprite(mobj_t *thing)
 	vis->scale = yscale; //<<detailshift;
 	vis->sortscale = sortscale;
 	vis->dispoffset = thing->info->dispoffset; // Monster Iestyn: 23/11/15
-	vis->gx = thing->x;
-	vis->gy = thing->y;
+	vis->gx = pos.x;
+	vis->gy = pos.y;
 	vis->gz = gz;
 	vis->gzt = gzt;
 	vis->thingheight = thing->height;
-	vis->pz = thing->z;
+	vis->pz = pos.z;
 	vis->pzt = vis->pz + vis->thingheight;
 	vis->texturemid = vis->gzt - viewz;
 	vis->scalestep = scalestep;

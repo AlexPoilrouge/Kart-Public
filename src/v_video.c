@@ -19,6 +19,7 @@
 #include "hu_stuff.h"
 #include "r_draw.h"
 #include "console.h"
+#include "d_main.h"
 
 #include "i_video.h" // rendermode
 #include "z_zone.h"
@@ -1176,10 +1177,13 @@ void V_DrawVhsEffect(boolean rewind)
 	if (rewind)
 		V_DrawVhsEffect(false); // experimentation
 
-	upbary -= vid.dupy * (rewind ? 3 : 1.8f);
-	downbary += vid.dupy * (rewind ? 2 : 1);
-	if (upbary < -barsize) upbary = vid.height;
-	if (downbary > vid.height) downbary = -barsize;
+	if (!lerp_sameframe)
+	{
+		upbary -= vid.dupy * (rewind ? 3 : 1.8f);
+		downbary += vid.dupy * (rewind ? 2 : 1);
+		if (upbary < -barsize) upbary = vid.height;
+		if (downbary > vid.height) downbary = -barsize;
+	}
 
 	for (y = 0; y < vid.height; y+=2)
 	{

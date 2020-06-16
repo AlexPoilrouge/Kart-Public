@@ -364,6 +364,12 @@ static boolean Processackpak(void)
 				if (!nextfirstack)
 					nextfirstack = 1;
 
+				//Sometimes a client will timeout while loading files during connection
+				//The client still thinks it is connected during this situation and will send an ack of > 1
+				//Here we set nextfirstack to ack in this situation so the server does not treat this as an out of order packet
+				if (netbuffer->packettype == PT_CLIENTJOIN)
+					nextfirstack = ack;
+
 				if (ack == nextfirstack)
 				{
 					UINT8 hm1; // head - 1

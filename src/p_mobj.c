@@ -3524,6 +3524,10 @@ boolean P_CameraThinker(player_t *player, camera_t *thiscam, boolean resetcalled
 	postimg_t postimg = postimg_none;
 	UINT8 i;
 
+	thiscam->lerp.x = thiscam->x;
+	thiscam->lerp.y = thiscam->y;
+	thiscam->lerp.z = thiscam->z;
+
 	// This can happen when joining
 	if (thiscam->subsector == NULL || thiscam->subsector->sector == NULL)
 		return true;
@@ -6342,6 +6346,11 @@ void P_MobjThinker(mobj_t *mobj)
 {
 	I_Assert(mobj != NULL);
 	I_Assert(!P_MobjWasRemoved(mobj));
+
+	mobj->lerp.x = mobj->x;
+	mobj->lerp.y = mobj->y;
+	mobj->lerp.z = mobj->z;
+	mobj->lerp.angle = mobj->angle;
 
 	if (mobj->flags & MF_NOTHINK)
 		return;

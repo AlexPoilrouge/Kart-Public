@@ -375,6 +375,11 @@ typedef struct mobj_s
 	boolean colorized; // Whether the mobj uses the rainbow colormap
 
 	// WARNING: New fields must be added separately to savegame and Lua.
+
+	struct {
+		fixed_t x, y, z;
+		angle_t angle;
+	} lerp; // Previous positions for interpolation
 } mobj_t;
 
 //

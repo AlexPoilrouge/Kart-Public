@@ -2291,8 +2291,9 @@ static void HU_DrawCEcho(void)
 		echoptr = line;
 		echoptr++;
 	}
-
-	--cechotimer;
+	
+	if (!lerp_sameframe)
+		--cechotimer;
 }
 
 //
@@ -2353,24 +2354,27 @@ void HU_DrawSongCredits(void)
 	len = V_ThinStringWidth(str, V_ALLOWLOWERCASE|V_6WIDTHSPACE);
 	destx = (len+7);
 
-	if (cursongcredit.anim)
+	if (!lerp_sameframe)
 	{
-		if (cursongcredit.trans > 0)
-			cursongcredit.trans--;
-		if (cursongcredit.x < destx)
-			cursongcredit.x += (destx - cursongcredit.x) / 2;
-		if (cursongcredit.x > destx)
-			cursongcredit.x = destx;
-		cursongcredit.anim--;
-	}
-	else
-	{
-		if (cursongcredit.trans < NUMTRANSMAPS)
-			cursongcredit.trans++;
-		if (cursongcredit.x > 0)
-			cursongcredit.x /= 2;
-		if (cursongcredit.x < 0)
-			cursongcredit.x = 0;
+		if (cursongcredit.anim)
+		{
+			if (cursongcredit.trans > 0)
+				cursongcredit.trans--;
+			if (cursongcredit.x < destx)
+				cursongcredit.x += (destx - cursongcredit.x) / 2;
+			if (cursongcredit.x > destx)
+				cursongcredit.x = destx;
+			cursongcredit.anim--;
+		}
+		else
+		{
+			if (cursongcredit.trans < NUMTRANSMAPS)
+				cursongcredit.trans++;
+			if (cursongcredit.x > 0)
+				cursongcredit.x /= 2;
+			if (cursongcredit.x < 0)
+				cursongcredit.x = 0;
+		}
 	}
 
 	bgt = (NUMTRANSMAPS/2)+(cursongcredit.trans/2);
@@ -2393,7 +2397,7 @@ void HU_Drawer(void)
 	if (chat_on)
 	{
 		// count down the scroll timer.
-		if (chat_scrolltime > 0)
+		if (chat_scrolltime > 0 && lerp_sameframe)
 			chat_scrolltime--;
 		if (!OLDCHAT)
 			HU_DrawChat();
@@ -2423,7 +2427,10 @@ void HU_Drawer(void)
 		for (i=0; (i<chat_nummsg_min); i++)
 		{
 			if (chat_timers[i] > 0)
-				chat_timers[i]--;
+			{
+				if (!lerp_sameframe)
+					chat_timers[i]--;
+			}
 			else
 				HU_removeChatText_Mini();
 		}
