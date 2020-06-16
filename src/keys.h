@@ -26,6 +26,13 @@
 #define KEY_MINUS    45
 #define KEY_EQUALS   61
 
+#define KEY_FR_E_AIGUE (0x80+2)
+#define KEY_FR_E_GRAVE (0x80+10)
+#define KEY_FR_C_CEDILLE (0x80+7)
+#define KEY_FR_A_GRAVE (0x80+5)
+#define KEY_FR_U_GRAVE (0x80+13)
+
+
 #define KEY_NUMLOCK    (0x80+69)
 #define KEY_SCROLLLOCK (0x80+70)
 

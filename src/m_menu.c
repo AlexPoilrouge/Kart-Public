@@ -2380,8 +2380,16 @@ static boolean M_ChangeStringCvar(INT32 choice)
 	char buf[MAXSTRINGLENGTH];
 	size_t len;
 
-	if (shiftdown && choice >= 32 && choice <= 127)
-		choice = shiftxform[choice];
+	// if (shiftdown && choice >= 32 && choice <= 127)
+	// 	choice = shiftxform[choice];
+	if(choice >= 32 && choice <= 141){
+		if(shiftdown){
+			choice = shiftxform[choice];
+		}
+		else if(altdown & 0x2){
+			choice = french_altgrxform[choice];
+		}
+	}
 
 	switch (choice)
 	{
@@ -2403,7 +2411,7 @@ static boolean M_ChangeStringCvar(INT32 choice)
 			}
 			return true;
 		default:
-			if (choice >= 32 && choice <= 127)
+			if (choice >= 32 && choice <= 141)
 			{
 				len = strlen(cv->string);
 				if (len < MAXSTRINGLENGTH - 1)
@@ -2684,8 +2692,16 @@ boolean M_Responder(event_t *ev)
 	// Handle menuitems which need a specific key handling
 	if (routine && (currentMenu->menuitems[itemOn].status & IT_TYPE) == IT_KEYHANDLER)
 	{
-		if (shiftdown && ch >= 32 && ch <= 127)
-			ch = shiftxform[ch];
+		// if (shiftdown && ch >= 32 && ch <= 127)
+		// 	ch = shiftxform[ch];
+		if(ch >= 32 && ch <= 141){
+			if(shiftdown){
+				ch = shiftxform[ch];
+			}
+			else if(altdown & 0x2){
+				ch = french_altgrxform[ch];
+			}
+		}
 		routine(ch);
 		return true;
 	}
@@ -2725,8 +2741,16 @@ boolean M_Responder(event_t *ev)
 		if ((currentMenu->menuitems[itemOn].status & IT_CVARTYPE) == IT_CV_STRING)
 		{
 
-			if (shiftdown && ch >= 32 && ch <= 127)
-				ch = shiftxform[ch];
+			// if (shiftdown && ch >= 32 && ch <= 127)
+			// 	ch = shiftxform[ch];
+			if(ch >= 32 && ch <= 141){
+				if(shiftdown){
+					ch = shiftxform[ch];
+				}
+				else if(altdown & 0x2){
+					ch = french_altgrxform[ch];
+				}
+			}
 			if (M_ChangeStringCvar(ch))
 				return true;
 			else
@@ -5001,8 +5025,16 @@ static void M_AddonExec(INT32 ch)
 #define len menusearch[0]
 static boolean M_ChangeStringAddons(INT32 choice)
 {
-	if (shiftdown && choice >= 32 && choice <= 127)
-		choice = shiftxform[choice];
+	// if (shiftdown && choice >= 32 && choice <= 127)
+	// 	choice = shiftxform[choice];
+	if(choice >= 32 && choice <= 141){
+		if(shiftdown){
+			choice = shiftxform[choice];
+		}
+		else if(altdown & 0x2){
+			choice = french_altgrxform[choice];
+		}
+	}
 
 	switch (choice)
 	{

@@ -1117,11 +1117,17 @@ boolean CON_Responder(event_t *ev)
 	{
 		if (shiftdown ^ capslock)
 			key = shiftxform[key];
+		else if (altdown & 0x2){
+			key = french_altgrxform[key];
+		}
 	}
 	else
 	{
 		if (shiftdown)
 			key = shiftxform[key];
+		else if (altdown & 0x2){
+			key = french_altgrxform[key];
+		}
 	}
 
 	// enter a char into the command prompt

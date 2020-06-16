@@ -46,6 +46,8 @@
 
 extern char *shiftxform; // english translation shift table
 extern char english_shiftxform[];
+extern char french_shiftxform[];
+extern char french_altgrxform[];
 
 //------------------------------------
 //        sorted player lines

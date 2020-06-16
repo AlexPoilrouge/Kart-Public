@@ -354,6 +354,81 @@ static INT32 Impl_SDL_Scancode_To_Keycode(SDL_Scancode code)
 	return 0;
 }
 
+static INT32 Impl_SDL_Keysym_To_Keycode(SDL_Keysym keysym){
+	SDL_Keycode keycode= keysym.sym;
+	SDL_Scancode scancode= keysym.scancode;
+
+	if (keycode >= SDLK_a && keycode <= SDLK_z){
+		// get lowercase ASCII
+		return keycode;
+	}
+	if (keycode >= SDLK_F1 && keycode <= SDLK_F10)
+	{
+		return KEY_F1 + (keycode - SDLK_F1);
+	}
+	if(scancode == SDL_SCANCODE_APOSTROPHE){
+		return KEY_FR_U_GRAVE;
+	}
+	switch(scancode){
+		case SDL_SCANCODE_APOSTROPHE:    return KEY_FR_U_GRAVE;
+		case SDL_SCANCODE_LEFTBRACKET:   return '^';
+		default:               break;
+	}
+	switch (keycode)
+	{
+		// F11 and F12 are separated from the rest of the function keys
+		case SDLK_F11: return KEY_F11;
+		case SDLK_F12: return KEY_F12;
+
+		case SDLK_RETURN:         return KEY_ENTER;
+		case SDLK_ESCAPE:         return KEY_ESCAPE;
+		case SDLK_BACKSPACE:      return KEY_BACKSPACE;
+		case SDLK_TAB:            return KEY_TAB;
+		case SDLK_SPACE:          return KEY_SPACE;
+		case SDLK_EQUALS:         return KEY_EQUALS;
+		case SDLK_SEMICOLON:      return ';';
+		case SDLK_COMMA:          return ',';
+		case SDLK_COLON:          return ':';
+		case SDLK_EXCLAIM:        return '!';
+		case SDLK_DOLLAR:         return '$';
+		case SDLK_ASTERISK:       return '*';
+		case SDLK_PERCENT:        return '%';
+		case SDLK_0:              return KEY_FR_A_GRAVE;
+		case SDLK_1:
+		case SDLK_AMPERSAND:      return '&';
+		case SDLK_2:              return KEY_FR_E_AIGUE;
+		case SDLK_3:
+		case SDLK_QUOTEDBL:       return '"';
+		case SDLK_4:		      return '\'';
+		case SDLK_5:
+		case SDLK_LEFTPAREN:      return '(';
+		case SDLK_6:
+		case SDLK_MINUS:          return KEY_MINUS;
+		case SDLK_7:              return KEY_FR_E_GRAVE;
+		case SDLK_8:
+		case SDLK_UNDERSCORE:     return '_';
+		case SDLK_9:              return KEY_FR_C_CEDILLE;
+		case SDLK_RIGHTPAREN:     return ')';
+		case SDLK_SLASH:          return '/';
+		case SDLK_LESS:           return '<';
+
+
+		case SDLK_KP_0: return KEY_KEYPAD0;
+		case SDLK_KP_1: return KEY_KEYPAD1;
+		case SDLK_KP_2: return KEY_KEYPAD2;
+		case SDLK_KP_3: return KEY_KEYPAD3;
+		case SDLK_KP_4: return KEY_KEYPAD4;
+		case SDLK_KP_5: return KEY_KEYPAD5;
+		case SDLK_KP_6: return KEY_KEYPAD6;
+		case SDLK_KP_7: return KEY_KEYPAD7;
+		case SDLK_KP_8: return KEY_KEYPAD8;
+		case SDLK_KP_9: return KEY_KEYPAD9;
+		
+		default:                  break;
+	}
+	return Impl_SDL_Scancode_To_Keycode(scancode);
+}
+
 static void SDLdoGrabMouse(void)
 {
 	SDL_ShowCursor(SDL_DISABLE);
@@ -669,7 +744,8 @@ static void Impl_HandleKeyboardEvent(SDL_KeyboardEvent evt, Uint32 type)
 	{
 		return;
 	}
-	event.data1 = Impl_SDL_Scancode_To_Keycode(evt.keysym.scancode);
+	//event.data1 = Impl_SDL_Scancode_To_Keycode(evt.keysym.scancode);
+	event.data1 = Impl_SDL_Keysym_To_Keycode(evt.keysym);
 	if (event.data1) D_PostEvent(&event);
 }
 
