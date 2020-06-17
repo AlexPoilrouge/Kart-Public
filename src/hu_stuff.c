@@ -174,13 +174,13 @@ char french_shiftxform[] =
 	11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
 	21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
 	31,
-	' ','§', //shift-!
+	' ','$', //shift-!
 	'3', //shift-"
 	'#', '$', '%', 
 	'1', //shift-&
 	'4', // shift-'
 	'5', // shift-(
-	'°', // shift-)
+	')', // shift-)
 	'*', '+',
 	'?', // shift-,
 	'6', // shift--
@@ -249,7 +249,7 @@ char french_altgrxform[] ={
 	136, 137,
 	'`',
 	139, 140,
-	'ù'
+	KEY_FR_U_GRAVE
 };
 
 //fallback for special letter non displayable in the game (i.e.: 'é','à',etc.)
