@@ -252,6 +252,20 @@ char french_altgrxform[] ={
 	'ù'
 };
 
+//fallback for special letter non displayable in the game (i.e.: 'é','à',etc.)
+INT32 HU_FallBackFrSpecialLetter(INT32 key){
+	switch(key){
+		case KEY_FR_E_AIGUE:     return 'e';
+		case KEY_FR_E_GRAVE:     return 'e';
+		case KEY_FR_C_CEDILLE:   return 'c';
+		case KEY_FR_A_GRAVE:     return 'a';
+		case KEY_FR_U_GRAVE:     return 'u';
+		default:       return key;
+	}
+}
+
+
+
 static char cechotext[1024];
 static tic_t cechotimer = 0;
 static tic_t cechoduration = 5*TICRATE;
