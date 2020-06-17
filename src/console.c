@@ -661,6 +661,9 @@ INT32 CON_ShitAndAltGrChar(INT32 ch){
 		else if (altdown & 0x2){
 			ch = french_altgrxform[ch];
 		}
+		else{
+			ch = HU_FallBackFrSpecialLetter(ch);
+		}
 	}
 
 	return ch;
@@ -1259,6 +1262,10 @@ boolean CON_Responder(event_t *ev)
 		else if (altdown & 0x2){
 			key = french_altgrxform[key];
 		}
+		else{
+			key = HU_FallBackFrSpecialLetter(key);
+		}
+		
 	}
 	else
 	{
@@ -1266,6 +1273,9 @@ boolean CON_Responder(event_t *ev)
 			key = shiftxform[key];
 		else if (altdown & 0x2){
 			key = french_altgrxform[key];
+		}
+		else{
+			key = HU_FallBackFrSpecialLetter(key);
 		}
 	}
 

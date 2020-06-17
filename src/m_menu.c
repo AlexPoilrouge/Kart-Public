@@ -2403,6 +2403,9 @@ static boolean M_ChangeStringCvar(INT32 choice)
 		else if(altdown & 0x2){
 			choice = french_altgrxform[choice];
 		}
+		else{
+			choice = HU_FallBackFrSpecialLetter(choice);
+		}
 	}
 
 	switch (choice)
@@ -2715,6 +2718,9 @@ boolean M_Responder(event_t *ev)
 			else if(altdown & 0x2){
 				ch = french_altgrxform[ch];
 			}
+			else{
+				ch = HU_FallBackFrSpecialLetter(ch);
+			}
 		}
 		routine(ch);
 		return true;
@@ -2763,6 +2769,9 @@ boolean M_Responder(event_t *ev)
 				}
 				else if(altdown & 0x2){
 					ch = french_altgrxform[ch];
+				}
+				else{
+					ch = HU_FallBackFrSpecialLetter(ch);
 				}
 			}
 			if (M_ChangeStringCvar(ch))
@@ -5083,6 +5092,9 @@ static boolean M_ChangeStringAddons(INT32 choice)
 		}
 		else if(altdown & 0x2){
 			choice = french_altgrxform[choice];
+		}
+		else{
+			choice = HU_FallBackFrSpecialLetter(choice);
 		}
 	}
 

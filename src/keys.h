@@ -26,6 +26,8 @@
 #define KEY_MINUS    45
 #define KEY_EQUALS   61
 
+//azerty special keys support
+//(necessary for being able to print 'regular' chars in azerty)
 #define KEY_FR_E_AIGUE (0x80+2)
 #define KEY_FR_E_GRAVE (0x80+10)
 #define KEY_FR_C_CEDILLE (0x80+7)
