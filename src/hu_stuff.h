@@ -46,6 +46,11 @@
 
 extern char *shiftxform; // english translation shift table
 extern char english_shiftxform[];
+extern char french_shiftxform[];
+extern char french_altgrxform[];
+
+//fallback for special letter non displayable in the game (i.e.: 'é','à',etc.)
+INT32 HU_FallBackFrSpecialLetter(INT32 key);
 
 //------------------------------------
 //        sorted player lines
