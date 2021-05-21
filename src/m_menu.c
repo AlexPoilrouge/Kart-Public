@@ -2702,8 +2702,8 @@ boolean M_Responder(event_t *ev)
 				M_QuitSRB2(0);
 				return true;
 
-			case KEY_F11: // Gamma Level
-				CV_AddValue(&cv_usegamma, 1);
+			case KEY_F11: // Fullscreen
+				CV_AddValue(&cv_fullscreen, 1);
 				return true;
 
 			// Spymode on F12 handled in game logic
@@ -11344,12 +11344,12 @@ static const char *M_GetDiscordName(discordRequest_t *r)
 }
 
 // (this goes in k_hud.c when merged into v2)
-static void M_DrawSticker(INT32 x, INT32 y, INT32 width, INT32 flags, boolean small)
+static void M_DrawSticker(INT32 x, INT32 y, INT32 width, INT32 flags, boolean isSmall)
 {
 	patch_t *stickerEnd;
 	INT32 height;
-	
-	if (small == true)
+
+	if (isSmall == true)
 	{
 		stickerEnd = W_CachePatchName("K_STIKE2", PU_CACHE);
 		height = 6;

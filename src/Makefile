@@ -440,8 +440,8 @@ endif
 
 ifdef HAVE_DISCORDRPC
 LIBS+=-ldiscord-rpc
-CFLAGS+=-DHAVE_DISCORDRPC
-OBJS+=$(OBJDIR)/discord.o
+CFLAGS+=-DHAVE_DISCORDRPC -DUSE_STUN
+OBJS+=$(OBJDIR)/discord.o $(OBJDIR)/stun.o
 endif
 
 ifndef NO_LUA
@@ -513,6 +513,10 @@ endif
 
 ifdef ZDEBUG
 	CPPFLAGS+=-DZDEBUG
+endif
+
+ifdef DUMPCONSISTENCY
+	CPPFLAGS+=-DDUMPCONSISTENCY
 endif
 
 ifdef DEVELOP
