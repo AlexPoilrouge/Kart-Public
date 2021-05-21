@@ -506,6 +506,8 @@ consvar_t cv_lessbattlevotes = {"lessbattlevotes", "Off", CV_SAVE, CV_OnOff, NUL
 static CV_PossibleValue_t encorevotes_cons_t[] = {{0, "One"}, {1, "Except One"}, {0, NULL}};
 consvar_t cv_encorevotes = {"encorevotes", "One", CV_SAVE, encorevotes_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
 
+consvar_t cv_skinselectspin = {"skinselectspin", "4", CV_SAVE, CV_Unsigned, NULL, 0, NULL, NULL, 0, 0, NULL};
+
 INT16 gametype = GT_RACE; // SRB2kart
 boolean forceresetplayers = false;
 boolean deferencoremode = false;
@@ -767,6 +769,10 @@ void D_RegisterServerCommands(void)
 
 	CV_RegisterVar(&cv_lessbattlevotes);
 	CV_RegisterVar(&cv_encorevotes);
+
+#ifdef USE_STUN
+	CV_RegisterVar(&cv_stunserver);
+#endif
 
 	CV_RegisterVar(&cv_discordinvites);
 	RegisterNetXCmd(XD_DISCORD, Got_DiscordInfo);
@@ -1048,6 +1054,8 @@ void D_RegisterClientCommands(void)
 
 	CV_RegisterVar(&cv_resume);
 	CV_RegisterVar(&cv_fading);
+	
+	CV_RegisterVar(&cv_skinselectspin);
 
 	// ingame object placing
 	COM_AddCommand("objectplace", Command_ObjectPlace_f);
@@ -3012,15 +3020,15 @@ static void Command_ReplayMarker(void)
 		CONS_Printf(M_GetText("You must be in a level to use this.\n"));
 		return;
 	}
-	if (demo.savemode == DSM_WILLSAVE) {
+	if (demo.savemode == DSM_WILLAUTOSAVE) {
 		demo.savemode = DSM_NOTSAVING;
 		CONS_Printf("Replay unmarked.\n");
 	} else {
 		int adjustedleveltime = leveltime - starttime;
-		demo.savemode = DSM_WILLSAVE;
+		demo.savemode = DSM_WILLAUTOSAVE;
 		if (adjustedleveltime < 0)
 			adjustedleveltime = 0;
-		snprintf(demo.titlename, 64, "%s - %i:%i - %s", G_BuildMapTitle(gamemap), G_TicsToMinutes(adjustedleveltime, false), G_TicsToSeconds(adjustedleveltime), modeattacking ? "Record Attack" : connectedservername);
+		snprintf(demo.titlename, 64, "%s [%i:%02d/%.5s]", G_BuildMapTitle(gamemap), G_TicsToMinutes(adjustedleveltime, false), G_TicsToSeconds(adjustedleveltime), modeattacking ? "Record Attack" : connectedservername);
 		CONS_Printf("Replay will be saved!\n");
 	}
 }

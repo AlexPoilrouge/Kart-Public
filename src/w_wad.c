@@ -338,7 +338,7 @@ ExtCheck (
 	if (n > 0)
 	{
 		if (filename[n] == '.')
-			return ( strcmp(&filename[n + 1], ext) == 0 );
+			return ( strcasecmp(&filename[n + 1], ext) == 0 );
 	}
 	return 0;
 }

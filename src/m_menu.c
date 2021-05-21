@@ -68,6 +68,9 @@
 // And just some randomness for the exits.
 #include "m_random.h"
 
+// protocol handling
+#include "d_protocol.h"
+
 #if defined(HAVE_SDL)
 #include "SDL.h"
 #if SDL_VERSION_ATLEAST(2,0,0)
@@ -305,6 +308,7 @@ menu_t OP_SoundOptionsDef;
 
 //Misc
 menu_t OP_DataOptionsDef, OP_ScreenshotOptionsDef, OP_EraseDataDef;
+menu_t OP_ProtocolDef;
 #ifdef HAVE_DISCORDRPC
 menu_t OP_DiscordOptionsDef;
 #endif
@@ -322,6 +326,7 @@ static void M_Addons(INT32 choice);
 static void M_AddonsOptions(INT32 choice);
 static patch_t *addonsp[NUM_EXT+5];
 
+static void M_DeleteProtocol(void);
 // Bird
 menu_t OP_BirdDef;
 menu_t OP_TiltDef;
@@ -1369,12 +1374,13 @@ static menuitem_t OP_DataOptionsMenu[] =
 	{IT_STRING | IT_CALL,		NULL, "Screenshot Options...",	M_ScreenshotOptions,	 10},
 	{IT_STRING | IT_CALL,		NULL, "Addon Options...",		M_AddonsOptions,		 20},
 	{IT_STRING | IT_SUBMENU,	NULL, "Replay Options...",		&MISC_ReplayOptionsDef,	 30},
+	{IT_STRING | IT_SUBMENU,	NULL, "Protocol options...",		&OP_ProtocolDef,	40},
 #ifdef HAVE_DISCORDRPC
-	{IT_STRING | IT_SUBMENU,	NULL, "Discord Options...",		&OP_DiscordOptionsDef,	 40},
+	{IT_STRING | IT_SUBMENU,	NULL, "Discord Options...",		&OP_DiscordOptionsDef,	 50},
 
-	{IT_STRING | IT_SUBMENU,	NULL, "Erase Data...",			&OP_EraseDataDef,		 60},
+	{IT_STRING | IT_SUBMENU,	NULL, "Erase Data...",			&OP_EraseDataDef,		 70},
 #else
-	{IT_STRING | IT_SUBMENU,	NULL, "Erase Data...",			&OP_EraseDataDef,		 50},
+	{IT_STRING | IT_SUBMENU,	NULL, "Erase Data...",			&OP_EraseDataDef,		 60},
 #endif
 };
 
@@ -1435,6 +1441,12 @@ static menuitem_t OP_AddonsOptionsMenu[] =
 enum
 {
 	op_addons_folder = 2,
+};
+
+static menuitem_t OP_ProtocolMenu[] =
+{
+	{IT_STRING | IT_CALL, NULL, "Register protocol", D_CreateProtocol, 10},
+	{IT_STRING | IT_CALL, NULL, "\x85" "Disable and delete protocols", M_DeleteProtocol, 20},
 };
 
 #ifdef HAVE_DISCORDRPC
@@ -2183,6 +2195,7 @@ menu_t OP_OpenGLColorDef =
 menu_t OP_DataOptionsDef = DEFAULTMENUSTYLE("M_DATA", OP_DataOptionsMenu, &OP_MainDef, 60, 30);
 menu_t OP_ScreenshotOptionsDef = DEFAULTMENUSTYLE("M_SCSHOT", OP_ScreenshotOptionsMenu, &OP_DataOptionsDef, 30, 30);
 menu_t OP_AddonsOptionsDef = DEFAULTMENUSTYLE("M_ADDONS", OP_AddonsOptionsMenu, &OP_DataOptionsDef, 30, 30);
+menu_t OP_ProtocolDef = DEFAULTMENUSTYLE(NULL, OP_ProtocolMenu, &OP_DataOptionsDef, 30, 30);
 #ifdef HAVE_DISCORDRPC
 menu_t OP_DiscordOptionsDef = DEFAULTMENUSTYLE(NULL, OP_DiscordOptionsMenu, &OP_DataOptionsDef, 30, 30);
 #endif
@@ -2821,8 +2834,8 @@ boolean M_Responder(event_t *ev)
 				M_QuitSRB2(0);
 				return true;
 
-			case KEY_F11: // Gamma Level
-				CV_AddValue(&cv_usegamma, 1);
+			case KEY_F11: // Fullscreen
+				CV_AddValue(&cv_fullscreen, 1);
 				return true;
 
 			// Spymode on F12 handled in game logic
@@ -9612,6 +9625,7 @@ static void M_DrawSetupMultiPlayerMenu(void)
 	INT32 sltw, actw, hetw;
 	UINT8 skintodisplay;
 	INT32 nameboxaddy = 0;
+	UINT32 speenframe;
 
 	mx = MP_PlayerSetupDef.x;
 	my = MP_PlayerSetupDef.y;
@@ -10078,9 +10092,17 @@ static void M_DrawSetupMultiPlayerMenu(void)
 		frame = 0; // Try to use standing frame
 
 	sprframe = &sprdef->spriteframes[frame];
-	patch = W_CachePatchNum(sprframe->lumppat[1], PU_CACHE);
-	if (sprframe->flip & 1) // Only for first sprite
-		flags |= V_FLIP; // This sprite is left/right flipped!
+
+	//minenice's speen css, it's a piece of shit but hey
+	//patch = W_CachePatchNum(sprframe->lumppat[1], PU_CACHE);
+	speenframe = (I_GetTime()*cv_skinselectspin.value/TICRATE + 1)%8;
+
+	//this is a very shitty solution for checking if a sprite needs flipping
+	//but it works
+	if ((sprframe->lumppat[speenframe] == sprframe->lumppat[8-speenframe]) && (speenframe > 4)) {
+		flags = V_FLIP; // This sprite is left/right flipped!
+	}
+	patch = W_CachePatchNum(sprframe->lumppat[speenframe], PU_CACHE);
 
 	// draw box around guy
 	V_DrawFill(mx + 43 - (charw/2), my+65, charw, 84, 239);
@@ -10671,6 +10693,14 @@ static void M_ScreenshotOptions(INT32 choice)
 	Moviemode_mode_Onchange();
 
 	M_SetupNextMenu(&OP_ScreenshotOptionsDef);
+}
+
+static void M_DeleteProtocol(void)
+{
+	M_StartMessage("Are you sure you want to disable and delete protocol registers?\n"
+			"Protocols can be registered again with the Register Protocol option in this menu\n\n"
+			"(Press 'Y' to confirm)\n",
+			D_DeleteProtocol, MM_YESNO);
 }
 
 // =============

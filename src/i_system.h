@@ -362,6 +362,4 @@ const char *I_ClipboardPaste(void);
 
 void I_RegisterSysCommands(void);
 
-void I_CursedWindowMovement(int xd, int yd);
-
 #endif

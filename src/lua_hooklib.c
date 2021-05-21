@@ -266,6 +266,7 @@ boolean LUAh_MobjHook(mobj_t *mo, enum hook which)
 	for (hookp = mobjhooks[MT_NULL]; hookp; hookp = hookp->next)
 		if (hookp->type == which)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 				LUA_PushUserdata(gL, mo, META_MOBJ);
 			lua_pushfstring(gL, FMT_HOOKID, hookp->id);
@@ -286,6 +287,7 @@ boolean LUAh_MobjHook(mobj_t *mo, enum hook which)
 	for (hookp = mobjhooks[mo->type]; hookp; hookp = hookp->next)
 		if (hookp->type == which)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 				LUA_PushUserdata(gL, mo, META_MOBJ);
 			lua_pushfstring(gL, FMT_HOOKID, hookp->id);
@@ -319,6 +321,7 @@ boolean LUAh_PlayerHook(player_t *plr, enum hook which)
 	for (hookp = playerhooks; hookp; hookp = hookp->next)
 		if (hookp->type == which)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 				LUA_PushUserdata(gL, plr, META_PLAYER);
 			lua_pushfstring(gL, FMT_HOOKID, hookp->id);
@@ -502,6 +505,7 @@ UINT8 LUAh_MobjCollideHook(mobj_t *thing1, mobj_t *thing2, enum hook which)
 	for (hookp = mobjcollidehooks[MT_NULL]; hookp; hookp = hookp->next)
 		if (hookp->type == which)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, thing1, META_MOBJ);
@@ -531,6 +535,7 @@ UINT8 LUAh_MobjCollideHook(mobj_t *thing1, mobj_t *thing2, enum hook which)
 	for (hookp = mobjcollidehooks[thing1->type]; hookp; hookp = hookp->next)
 		if (hookp->type == which)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, thing1, META_MOBJ);
@@ -576,6 +581,7 @@ boolean LUAh_MobjThinker(mobj_t *mo)
 	// Look for all generic mobj thinker hooks
 	for (hookp = mobjthinkerhooks[MT_NULL]; hookp; hookp = hookp->next)
 	{
+		ps_lua_mobjhooks++;
 		if (lua_gettop(gL) == 0)
 			LUA_PushUserdata(gL, mo, META_MOBJ);
 		lua_pushfstring(gL, FMT_HOOKID, hookp->id);
@@ -595,6 +601,7 @@ boolean LUAh_MobjThinker(mobj_t *mo)
 
 	for (hookp = mobjthinkerhooks[mo->type]; hookp; hookp = hookp->next)
 	{
+		ps_lua_mobjhooks++;
 		if (lua_gettop(gL) == 0)
 			LUA_PushUserdata(gL, mo, META_MOBJ);
 		lua_pushfstring(gL, FMT_HOOKID, hookp->id);
@@ -632,6 +639,7 @@ boolean LUAh_TouchSpecial(mobj_t *special, mobj_t *toucher)
 	for (hookp = mobjhooks[MT_NULL]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_TouchSpecial)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, special, META_MOBJ);
@@ -656,6 +664,7 @@ boolean LUAh_TouchSpecial(mobj_t *special, mobj_t *toucher)
 	for (hookp = mobjhooks[special->type]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_TouchSpecial)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, special, META_MOBJ);
@@ -697,6 +706,7 @@ UINT8 LUAh_ShouldDamage(mobj_t *target, mobj_t *inflictor, mobj_t *source, INT32
 	for (hookp = mobjhooks[MT_NULL]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_ShouldDamage)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, target, META_MOBJ);
@@ -730,6 +740,7 @@ UINT8 LUAh_ShouldDamage(mobj_t *target, mobj_t *inflictor, mobj_t *source, INT32
 	for (hookp = mobjhooks[target->type]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_ShouldDamage)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, target, META_MOBJ);
@@ -780,6 +791,7 @@ boolean LUAh_MobjDamage(mobj_t *target, mobj_t *inflictor, mobj_t *source, INT32
 	for (hookp = mobjhooks[MT_NULL]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_MobjDamage)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, target, META_MOBJ);
@@ -808,6 +820,7 @@ boolean LUAh_MobjDamage(mobj_t *target, mobj_t *inflictor, mobj_t *source, INT32
 	for (hookp = mobjhooks[target->type]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_MobjDamage)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, target, META_MOBJ);
@@ -853,6 +866,7 @@ boolean LUAh_MobjDeath(mobj_t *target, mobj_t *inflictor, mobj_t *source)
 	for (hookp = mobjhooks[MT_NULL]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_MobjDeath)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, target, META_MOBJ);
@@ -879,6 +893,7 @@ boolean LUAh_MobjDeath(mobj_t *target, mobj_t *inflictor, mobj_t *source)
 	for (hookp = mobjhooks[target->type]; hookp; hookp = hookp->next)
 		if (hookp->type == hook_MobjDeath)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, target, META_MOBJ);
@@ -1059,6 +1074,7 @@ boolean LUAh_LinedefExecute(line_t *line, mobj_t *mo, sector_t *sector)
 	for (hookp = linedefexecutorhooks; hookp; hookp = hookp->next)
 		if (!strcmp(hookp->s.funcname, line->text))
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, line, META_LINE);
@@ -1308,6 +1324,7 @@ UINT8 LUAh_ShouldSpin(player_t *player, mobj_t *inflictor, mobj_t *source)
 	for (hookp = roothook; hookp; hookp = hookp->next)
 		if (hookp->type == hook_ShouldSpin)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, player, META_PLAYER);
@@ -1355,6 +1372,7 @@ UINT8 LUAh_ShouldExplode(player_t *player, mobj_t *inflictor, mobj_t *source)
 	for (hookp = roothook; hookp; hookp = hookp->next)
 		if (hookp->type == hook_ShouldExplode)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, player, META_PLAYER);
@@ -1402,6 +1420,7 @@ UINT8 LUAh_ShouldSquish(player_t *player, mobj_t *inflictor, mobj_t *source)
 	for (hookp = roothook; hookp; hookp = hookp->next)
 		if (hookp->type == hook_ShouldSquish)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, player, META_PLAYER);
@@ -1449,6 +1468,7 @@ boolean LUAh_PlayerSpin(player_t *player, mobj_t *inflictor, mobj_t *source)
 	for (hookp = roothook; hookp; hookp = hookp->next)
 		if (hookp->type == hook_PlayerSpin)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, player, META_PLAYER);
@@ -1490,6 +1510,7 @@ boolean LUAh_PlayerSquish(player_t *player, mobj_t *inflictor, mobj_t *source)
 	for (hookp = roothook; hookp; hookp = hookp->next)
 		if (hookp->type == hook_PlayerSquish)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, player, META_PLAYER);
@@ -1531,6 +1552,7 @@ boolean LUAh_PlayerExplode(player_t *player, mobj_t *inflictor, mobj_t *source)
 	for (hookp = roothook; hookp; hookp = hookp->next)
 		if (hookp->type == hook_PlayerExplode)
 		{
+			ps_lua_mobjhooks++;
 			if (lua_gettop(gL) == 0)
 			{
 				LUA_PushUserdata(gL, player, META_PLAYER);

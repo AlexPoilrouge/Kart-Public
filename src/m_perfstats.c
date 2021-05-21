@@ -17,6 +17,7 @@
 #include "r_main.h"
 #include "i_system.h"
 #include "z_zone.h"
+#include "p_local.h"
 
 #ifdef HWRENDER
 #include "hardware/hw_main.h"
@@ -26,8 +27,12 @@ int ps_tictime = 0;
 
 int ps_playerthink_time = 0;
 int ps_thinkertime = 0;
+
+int ps_checkposition_calls = 0;
+
 #ifdef HAVE_BLUA
 int ps_lua_thinkframe_time = 0;
+int ps_lua_mobjhooks = 0;
 
 // dynamically allocated resizeable array for thinkframe hook stats
 ps_hookinfo_t *thinkframe_hooks = NULL;
@@ -263,6 +268,17 @@ void M_DrawPerfStats(void)
 		}
 		else // high resolution
 		{
+			thinker_t *thinker;
+			int thinkercount = 0;
+			int mobjcount = 0;
+			// These seem to be very rare since they don't get thinkers on spawn.
+			// Could someone theoretically set MF_NOTHINK during runtime though?
+			int nothinkcount = 0;
+			int scenerycount = 0;
+			int precipcount = 0;
+			int removecount = 0;
+			// y offset for drawing second column
+			int yoffset2 = 0;
 			snprintf(s, sizeof s - 1, "Game logic:      %d", ps_tictime);
 			V_DrawSmallString(20, 10, V_MONOSPACE | V_ALLOWLOWERCASE | V_YELLOWMAP, s);
 			snprintf(s, sizeof s - 1, "P_PlayerThink:   %d", ps_playerthink_time);
@@ -276,6 +292,52 @@ void M_DrawPerfStats(void)
 				ps_tictime - ps_playerthink_time - ps_thinkertime - ps_lua_thinkframe_time);
 			V_DrawSmallString(24, 30, V_MONOSPACE | V_ALLOWLOWERCASE | V_YELLOWMAP, s);
 #endif
+			for (thinker = thinkercap.next; thinker != &thinkercap; thinker = thinker->next)
+			{
+				thinkercount++;
+				if (thinker->function.acp1 == (actionf_p1)P_MobjThinker)
+				{
+					mobj_t *mobj = (mobj_t*)thinker;
+					mobjcount++;
+					if (mobj->flags & MF_NOTHINK)
+						nothinkcount++;
+					else if (mobj->flags & MF_SCENERY)
+						scenerycount++;
+				}
+				else if (thinker->function.acp1 == (actionf_p1)P_NullPrecipThinker)
+					precipcount++;
+				else if (thinker->function.acp1 == (actionf_p1)P_RemoveThinkerDelayed)
+					removecount++;
+			}
+			snprintf(s, sizeof s - 1, "Thinkers:        %d", thinkercount);
+			V_DrawSmallString(115, 10+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+			snprintf(s, sizeof s - 1, "Mobjs:           %d", mobjcount);
+			V_DrawSmallString(119, 15+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+			snprintf(s, sizeof s - 1, "Regular:         %d", mobjcount - scenerycount - nothinkcount);
+			V_DrawSmallString(123, 20+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+			snprintf(s, sizeof s - 1, "Scenery:         %d", scenerycount);
+			V_DrawSmallString(123, 25+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+			if (nothinkcount)
+			{
+				snprintf(s, sizeof s - 1, "Nothink:         %d", nothinkcount);
+				V_DrawSmallString(123, 30+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+				yoffset2 += 5;
+			}
+			snprintf(s, sizeof s - 1, "Precip:          %d", precipcount);
+			V_DrawSmallString(119, 30+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+			snprintf(s, sizeof s - 1, "Pending removal: %d", removecount);
+			V_DrawSmallString(119, 35+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+			snprintf(s, sizeof s - 1, "Other:           %d", thinkercount - mobjcount - precipcount - removecount);
+			V_DrawSmallString(119, 40+yoffset2, V_MONOSPACE | V_ALLOWLOWERCASE | V_BLUEMAP, s);
+
+			snprintf(s, sizeof s - 1, "Calls:");
+			V_DrawSmallString(212, 10, V_MONOSPACE | V_ALLOWLOWERCASE | V_PURPLEMAP, s);
+#ifdef HAVE_BLUA
+			snprintf(s, sizeof s - 1, "Lua mobj hooks:  %d", ps_lua_mobjhooks);
+			V_DrawSmallString(216, 15, V_MONOSPACE | V_ALLOWLOWERCASE | V_PURPLEMAP, s);
+#endif
+			snprintf(s, sizeof s - 1, "P_CheckPosition: %d", ps_checkposition_calls);
+			V_DrawSmallString(216, 20, V_MONOSPACE | V_ALLOWLOWERCASE | V_PURPLEMAP, s);
 		}
 	}
 #ifdef HAVE_BLUA
@@ -289,7 +351,7 @@ void M_DrawPerfStats(void)
 		{
 			int i;
 			// text writing position
-			int x = 5;
+			int x = 2;
 			int y = 4;
 			UINT32 text_color;
 			char tempbuffer[LUA_IDSIZE];
@@ -323,16 +385,16 @@ void M_DrawPerfStats(void)
 					{
 						strcpy(last_mod_name, tempstr);
 						len = (int)strlen(tempstr);
-						if (len > 30)
-							tempstr += len - 30;
+						if (len > 25)
+							tempstr += len - 25;
 						snprintf(s, sizeof s - 1, "%s", tempstr);
 						V_DrawSmallString(x, y, V_MONOSPACE | V_ALLOWLOWERCASE | V_GRAYMAP, s);
 						y += 4; // repeated code!
-						if (y > 180)
+						if (y > 192)
 						{
-							y = 10;
-							x += 150;
-							if (x > 155)
+							y = 4;
+							x += 106;
+							if (x > 214)
 								break;
 						}
 					}
@@ -348,16 +410,16 @@ void M_DrawPerfStats(void)
 					text_color = 0; // white
 				}
 				len = (int)strlen(str);
-				if (len > 25)
-					str += len - 25;
-				snprintf(s, sizeof s - 1, "%25s: %u", str, thinkframe_hooks[i].time_taken);
+				if (len > 20)
+					str += len - 20;
+				snprintf(s, sizeof s - 1, "%20s: %u", str, thinkframe_hooks[i].time_taken);
 				V_DrawSmallString(x, y, V_MONOSPACE | V_ALLOWLOWERCASE | text_color, s);
 				y += 4;
-				if (y > 180)
+				if (y > 192)
 				{
-					y = 10;
-					x += 150;
-					if (x > 155)
+					y = 4;
+					x += 106;
+					if (x > 214)
 						break;
 				}
 			}

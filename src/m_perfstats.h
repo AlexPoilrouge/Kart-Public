@@ -20,8 +20,12 @@ extern int ps_tictime;
 
 extern int ps_playerthink_time;
 extern int ps_thinkertime;
+
+extern int ps_checkposition_calls;
+
 #ifdef HAVE_BLUA
 extern int ps_lua_thinkframe_time;
+extern int ps_lua_mobjhooks;
 
 typedef struct
 {

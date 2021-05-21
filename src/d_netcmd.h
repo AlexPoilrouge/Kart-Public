@@ -158,6 +158,8 @@ extern consvar_t cv_skipmapcheck;
 
 extern consvar_t cv_sleep;
 
+extern consvar_t cv_skinselectspin;
+
 typedef enum
 {
 	SKINMENUTYPE_SCROLL = 0,

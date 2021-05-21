@@ -235,7 +235,7 @@ void ST_doPaletteStuff(void)
 	{
 		st_palette = palette;
 
-		if (rendermode != render_none)
+		if (rendermode == render_soft)
 		{
 			//V_SetPaletteLump(GetPalette()); // Reset the palette -- is this needed?
 			if (!splitscreen)
@@ -395,7 +395,10 @@ static inline void ST_Stop(void)
 	if (st_stopped)
 		return;
 
-	V_SetPalette(0);
+#ifdef HWRENDER
+	if (rendermode != render_opengl)
+#endif
+		V_SetPalette(0);
 
 	st_stopped = true;
 }

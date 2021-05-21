@@ -650,6 +650,11 @@ void P_Ticker(boolean run)
 #endif
 		}
 
+#ifdef HAVE_BLUA
+		ps_lua_mobjhooks = 0;
+#endif
+		ps_checkposition_calls = 0;
+
 		ps_playerthink_time = I_GetTimeMicros();
 		for (i = 0; i < MAXPLAYERS; i++)
 			if (playeringame[i] && players[i].mo && !P_MobjWasRemoved(players[i].mo))
@@ -752,8 +757,6 @@ void P_Ticker(boolean run)
 			quake.x = M_RandomRange(-ir,ir);
 			quake.y = M_RandomRange(-ir,ir);
 			quake.z = M_RandomRange(-ir,ir);
-			if (cv_windowquake.value)
-				I_CursedWindowMovement(FixedInt(quake.x), FixedInt(quake.y));
 			ir >>= 2;
 			ir = M_RandomRange(-ir,ir);
 			if (ir < 0)

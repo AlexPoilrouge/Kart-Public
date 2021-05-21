@@ -8908,7 +8908,8 @@ void P_PlayerThink(player_t *player)
 
 	K_KartPlayerThink(player, cmd); // SRB2kart
 
-	DoABarrelRoll(player);
+	if (rendermode != render_none)
+		DoABarrelRoll(player);
 
 /*
 //	Colormap verification
