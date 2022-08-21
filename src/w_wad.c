@@ -55,6 +55,7 @@
 #include "g_game.h" // G_LoadGameData
 #include "filesrch.h"
 
+#include "i_time.h"
 #include "i_video.h" // rendermode
 #include "d_netfil.h"
 #include "dehacked.h"
@@ -610,8 +611,6 @@ static lumpinfo_t* ResGetLumpsZip (FILE* handle, UINT16* nlmp)
 		lump_p->name2 = Z_Calloc(zentry->namelen + 1, PU_STATIC, NULL);
 		strncpy(lump_p->name2, fullname, zentry->namelen);
 
-		free(fullname);
-
 		switch(zentry->compression)
 		{
 		case 0:
@@ -630,6 +629,8 @@ static lumpinfo_t* ResGetLumpsZip (FILE* handle, UINT16* nlmp)
 			lump_p->compression = CM_UNSUPPORTED;
 			break;
 		}
+
+		free(fullname);
 	}
 
 	*nlmp = numlumps;
@@ -671,7 +672,7 @@ UINT16 W_InitFile(const char *filename)
 	else
 		refreshdirname = NULL;
 
-	//CONS_Debug(DBG_SETUP, "Loading %s\n", filename);
+	CONS_Printf("Loading %s\n", filename);
 	//
 	// check if limit of active wadfiles
 	//
@@ -848,6 +849,7 @@ void W_UnloadWadFile(UINT16 num)
 INT32 W_InitMultipleFiles(char **filenames, boolean addons)
 {
 	INT32 rc = 1;
+	INT32 overallrc = 1;
 
 	// will be realloced as lumps are added
 	for (; *filenames; filenames++)
@@ -856,13 +858,16 @@ INT32 W_InitMultipleFiles(char **filenames, boolean addons)
 			G_SetGameModified(true, false);
 
 		//CONS_Debug(DBG_SETUP, "Loading %s\n", *filenames);
-		rc &= (W_InitFile(*filenames) != INT16_MAX) ? 1 : 0;
+		rc = W_InitFile(*filenames);
+		if (rc == INT16_MAX)
+			CONS_Printf(M_GetText("Errors occurred while loading %s; not added.\n"), *filenames);
+		overallrc &= (rc != INT16_MAX) ? 1 : 0;
 	}
 
 	if (!numwadfiles)
 		I_Error("W_InitMultipleFiles: no files found");
 
-	return rc;
+	return overallrc;
 }
 
 /** Make sure a lump number is valid.
@@ -1678,7 +1683,7 @@ static int W_VerifyFile(const char *filename, lumpchecklist_t *checklist,
 				continue;
 
 			for (j = 0; j < NUMSPRITES; j++)
-				if (sprnames[j] && !strncmp(lumpinfo.name, sprnames[j], 4)) // Sprites
+				if (sprnames[j][0] && !strncmp(lumpinfo.name, sprnames[j], 4)) // Sprites
 					continue;
 
 			goodfile = false;
