@@ -1117,6 +1117,7 @@ typedef enum
 	CL_DOWNLOADFILES,
 	CL_ASKJOIN,
 	CL_LOADFILES,
+	CL_SETUPFILES,
 	CL_WAITJOINRESPONSE,
 #ifdef JOININGAME
 	CL_DOWNLOADSAVEGAME,
@@ -1129,6 +1130,7 @@ typedef enum
 	CL_PREPAREHTTPFILES,
 	CL_DOWNLOADHTTPFILES,
 #endif
+	CL_LEGACYREQUESTFAILED,
 } cl_mode_t;
 
 static void GetPackets(void);
@@ -1226,7 +1228,11 @@ static inline void CL_DrawConnectionStatus(void)
 #endif
 			case CL_ASKFULLFILELIST:
 			case CL_CONFIRMCONNECT:
+			case CL_LEGACYREQUESTFAILED:
 				cltext = "";
+				break;
+			case CL_SETUPFILES:
+				cltext = M_GetText("Configuring addons...");
 				break;
 			case CL_ASKJOIN:
 			case CL_WAITJOINRESPONSE:
@@ -1329,8 +1335,10 @@ static inline void CL_DrawConnectionStatus(void)
 				strncpy(tempname, filename, sizeof(tempname)-1);
 			}
 
+			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-30, 0,
+				va(M_GetText("%s downloading"), ((cl_mode == CL_DOWNLOADHTTPFILES) ? "\x82""HTTP" : "\x85""Direct")));
 			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-22, V_YELLOWMAP,
-				va(M_GetText("Downloading \"%s\""), tempname));
+				va(M_GetText("\"%s\""), tempname));
 			V_DrawString(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-58, V_20TRANS|V_MONOSPACE,
 				va(" %4uK/%4uK",fileneeded[lastfilenum].currentsize>>10,file->totalsize>>10));
 			V_DrawRightAlignedString(BASEVIDWIDTH/2+128, BASEVIDHEIGHT-58, V_20TRANS|V_MONOSPACE,
@@ -1933,7 +1941,16 @@ static void CL_LoadReceivedSavegame(void)
 #ifndef NONET
 static void SendAskInfo(INT32 node)
 {
-	const tic_t asktime = I_GetTime();
+	tic_t asktime;
+
+	if (node != 0 && node != BROADCASTADDR &&
+			cv_rendezvousserver.string[0])
+	{
+		I_NetRequestHolePunch(node);
+	}
+
+	asktime = I_GetTime();
+
 	netbuffer->packettype = PT_ASKINFO;
 	netbuffer->u.askinfo.version = VERSION;
 	netbuffer->u.askinfo.time = (tic_t)LONG(asktime);
@@ -1942,16 +1959,14 @@ static void SendAskInfo(INT32 node)
 	// now allowed traffic from the host to us in, so once the MS relays
 	// our address to the host, it'll be able to speak to us.
 	HSendPacket(node, false, 0, sizeof (askinfo_pak));
-
-	if (node != 0 && node != BROADCASTADDR &&
-			cv_rendezvousserver.string[0])
-	{
-		I_NetRequestHolePunch();
-	}
 }
 
 serverelem_t serverlist[MAXSERVERLIST];
 UINT32 serverlistcount = 0;
+UINT32 serverlistultimatecount = 0;
+
+static boolean resendserverlistnode[MAXNETNODES];
+static tic_t serverlistepoch;
 
 static void SL_ClearServerList(INT32 connectedserver)
 {
@@ -1964,6 +1979,8 @@ static void SL_ClearServerList(INT32 connectedserver)
 			serverlist[i].node = 0;
 		}
 	serverlistcount = 0;
+
+	memset(resendserverlistnode, 0, sizeof resendserverlistnode);
 }
 
 static UINT32 SL_SearchServer(INT32 node)
@@ -1979,6 +1996,8 @@ static UINT32 SL_SearchServer(INT32 node)
 static void SL_InsertServer(serverinfo_pak* info, SINT8 node)
 {
 	UINT32 i;
+
+	resendserverlistnode[node] = false;
 
 	// search if not already on it
 	i = SL_SearchServer(node);
@@ -2037,6 +2056,8 @@ void CL_QueryServerList (msg_server_t *server_list)
 
 	CL_UpdateServerList();
 
+	serverlistepoch = I_GetTime();
+
 	for (i = 0; server_list[i].header.buffer[0]; i++)
 	{
 		// Make sure MS version matches our own, to
@@ -2049,19 +2070,42 @@ void CL_QueryServerList (msg_server_t *server_list)
 			if (node == -1)
 				break; // no more node free
 			SendAskInfo(node);
-			// Force close the connection so that servers can't eat
-			// up nodes forever if we never get a reply back from them
-			// (usually when they've not forwarded their ports).
-			//
-			// Don't worry, we'll get in contact with the working
-			// servers again when they send SERVERINFO to us later!
-			//
-			// (Note: as a side effect this probably means every
-			// server in the list will probably be using the same node (e.g. node 1),
-			// not that it matters which nodes they use when
-			// the connections are closed afterwards anyway)
-			// -- Monster Iestyn 12/11/18
-			Net_CloseConnection(node|FORCECLOSE);
+			resendserverlistnode[node] = true;
+			// Leave this node open. It'll be closed if the
+			// request times out (CL_TimeoutServerList).
+		}
+	}
+
+	serverlistultimatecount = i;
+}
+
+#define SERVERLISTRESENDRATE NEWTICRATE
+
+void CL_TimeoutServerList(void)
+{
+	if (netgame && serverlistultimatecount > serverlistcount)
+	{
+		const tic_t timediff = I_GetTime() - serverlistepoch;
+		const tic_t timetoresend = timediff % SERVERLISTRESENDRATE;
+		const boolean timedout = timediff > connectiontimeout;
+
+		if (timedout || (timediff > 0 && timetoresend == 0))
+		{
+			INT32 node;
+
+			for (node = 1; node < MAXNETNODES; ++node)
+			{
+				if (resendserverlistnode[node])
+				{
+					if (timedout)
+						Net_CloseConnection(node|FORCECLOSE);
+					else
+						SendAskInfo(node);
+				}
+			}
+
+			if (timedout)
+				serverlistultimatecount = serverlistcount;
 		}
 	}
 }
@@ -2083,6 +2127,10 @@ static void M_ConfirmConnect(event_t *ev)
 					if (CL_SendRequestFile())
 					{
 						cl_mode = CL_DOWNLOADFILES;
+					}
+					else
+					{
+						cl_mode = CL_LEGACYREQUESTFAILED;
 					}
 				}
 #ifdef HAVE_CURL
@@ -2238,6 +2286,10 @@ static boolean CL_FinishedFileList(void)
 			if (CL_SendRequestFile())
 			{
 				cl_mode = CL_DOWNLOADFILES;
+			}
+			else
+			{
+				cl_mode = CL_LEGACYREQUESTFAILED;
 			}
 		}
 #endif
@@ -2425,8 +2477,28 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 
 			cl_mode = CL_LOADFILES;
 			break;
+		case CL_LEGACYREQUESTFAILED:
+			{
+				CONS_Printf(M_GetText("Legacy downloader request packet failed.\n"));
+				CONS_Printf(M_GetText("Network game synchronization aborted.\n"));
+				D_QuitNetGame();
+				CL_Reset();
+				D_StartTitle();
+				M_StartMessage(M_GetText(
+					"The direct download encountered an error.\n"
+					"See the logfile for more info.\n"
+					"\n"
+					"Press ESC\n"
+				), NULL, MM_NOTHING);
+				return false;
+			}
 		case CL_LOADFILES:
-			if (CL_LoadServerFiles())
+			if (CL_LoadServerFiles()) 
+				cl_mode = CL_SETUPFILES;
+
+			break;
+		case CL_SETUPFILES:
+			if (P_PartialAddGetStage() < 0 || P_MultiSetupWadFiles(false))
 			{
 				*asksent = 0; //This ensure the first join ask is right away
 				firstconnectattempttime = I_GetTime();
@@ -2632,7 +2704,11 @@ static void CL_ConnectToServer(void)
 #else
 		if (!CL_ServerConnectionTicker((char*)NULL, &oldtic, (tic_t *)NULL))
 #endif
+		{
+			if (P_PartialAddGetStage() >= 0)
+				P_MultiSetupWadFiles(true); // in case any partial adds were done
 			return;
+		}
 
 		if (server)
 		{
@@ -3986,7 +4062,7 @@ void D_QuitNetGame(void)
 			if (nodeingame[i])
 				HSendPacket(i, true, 0, 0);
 #ifdef MASTERSERVER
-		if (serverrunning && cv_advertise.value)
+		if (serverrunning && netgame && cv_advertise.value) // see mserv.c Online()
 			UnregisterServer();
 #endif
 	}
@@ -4334,6 +4410,11 @@ static void HandleConnect(SINT8 node)
 	// If a server filled out, then it'd overwrite the host and turn everyone into weird husks.....
 	// It's too much effort to legimately fix right now. Just prevent it from reaching that state.
 	UINT8 maxplayers = min((dedicated ? MAXPLAYERS-1 : MAXPLAYERS), cv_maxplayers.value);
+	UINT8 connectedplayers = 0;
+
+	for (UINT8 i = dedicated ? 1 : 0; i < MAXPLAYERS; i++)
+		if (playernode[i] != UINT8_MAX) // We use this to count players because it is affected by SV_AddWaitingPlayers when more than one client joins on the same tic, unlike playeringame and D_NumPlayers. UINT8_MAX denotes no node for that player
+			connectedplayers++;
 
 	if (bannednode && bannednode[node].banid != SIZE_MAX)
 	{
@@ -4391,7 +4472,7 @@ static void HandleConnect(SINT8 node)
 	{
 		SV_SendRefuse(node, M_GetText("The server is not accepting\njoins for the moment."));
 	}
-	else if (D_NumPlayers() >= maxplayers)
+	else if (connectedplayers >= maxplayers)
 	{
 		SV_SendRefuse(node, va(M_GetText("Maximum players reached: %d"), maxplayers));
 	}
@@ -4399,7 +4480,7 @@ static void HandleConnect(SINT8 node)
 	{
 		SV_SendRefuse(node, M_GetText("Too many players from\nthis node."));
 	}
-	else if (netgame && D_NumPlayers() + netbuffer->u.clientcfg.localplayers > maxplayers)
+	else if (netgame && connectedplayers + netbuffer->u.clientcfg.localplayers > maxplayers)
 	{
 		SV_SendRefuse(node, va(M_GetText("Number of local players\nwould exceed maximum: %d"), maxplayers));
 	}
@@ -5891,23 +5972,20 @@ boolean TryRunTics(tic_t realtics)
 
 	if (ticking)
 	{
-		if (advancedemo)
-			D_StartTitle();
-		else
-			// run the count * tics
-			while (neededtic > gametic)
-			{
-				DEBFILE(va("============ Running tic %d (local %d)\n", gametic, localgametic));
+		// run the count * tics
+		while (neededtic > gametic)
+		{
+			DEBFILE(va("============ Running tic %d (local %d)\n", gametic, localgametic));
 
-				G_Ticker((gametic % NEWTICRATERATIO) == 0);
-				ExtraDataTicker();
-				gametic++;
-				consistancy[gametic%TICQUEUE] = Consistancy();
+			G_Ticker((gametic % NEWTICRATERATIO) == 0);
+			ExtraDataTicker();
+			gametic++;
+			consistancy[gametic%TICQUEUE] = Consistancy();
 
-				// Leave a certain amount of tics present in the net buffer as long as we've ran at least one tic this frame.
-				if (client && gamestate == GS_LEVEL && leveltime > 3 && neededtic <= gametic + cv_netticbuffer.value)
-					break;
-			}
+			// Leave a certain amount of tics present in the net buffer as long as we've ran at least one tic this frame.
+			if (client && gamestate == GS_LEVEL && leveltime > 3 && neededtic <= gametic + cv_netticbuffer.value)
+				break;
+		}
 	}
 	else
 	{
@@ -5929,53 +6007,77 @@ boolean TryRunTics(tic_t realtics)
 
 static INT32 pingtimeout[MAXPLAYERS];
 
+#define PINGKICK_TICQUEUE 2
+#define PINGKICK_LIMIT 1
+
 static inline void PingUpdate(void)
 {
 	INT32 i;
-	boolean laggers[MAXPLAYERS];
-	UINT8 numlaggers = 0;
-	memset(laggers, 0, sizeof(boolean) * MAXPLAYERS);
+	UINT8 pingkick[MAXPLAYERS];
+	UINT8 nonlaggers = 0;
+	memset(pingkick, 0, sizeof(pingkick));
 
 	netbuffer->packettype = PT_PING;
 
 	//check for ping limit breakage.
-	if (cv_maxping.value)
+	//if (cv_maxping.value) -- always check for TICQUEUE overrun
 	{
-		for (i = 1; i < MAXPLAYERS; i++)
+		for (i = 0; i < MAXPLAYERS; i++)
 		{
-			if (playeringame[i] && (realpingtable[i] / pingmeasurecount > (unsigned)cv_maxping.value))
+			if (!playeringame[i] || P_IsLocalPlayer(&players[i])) // should be P_IsMachineLocalPlayer for DRRR
 			{
-				if (players[i].jointime > 30 * TICRATE)
-					laggers[i] = true;
-				numlaggers++;
+				pingtimeout[i] = 0;
+				continue;
+			}
+
+			if ((maketic + 5) >= nettics[playernode[i]] + (TICQUEUE-(2*TICRATE)))
+			{
+				// Anyone who's gobbled most of the TICQUEUE and is likely to halt the server the next few times this runs has to die *right now*. (See also NetUpdate)
+				pingkick[i] = PINGKICK_TICQUEUE;
+			}
+			else if ((cv_maxping.value)
+				&& (realpingtable[i] / pingmeasurecount > (unsigned)cv_maxping.value))
+			{
+				if (players[i].jointime > 10 * TICRATE)
+				{
+					pingkick[i] = PINGKICK_LIMIT;
+				}
 			}
 			else
-				pingtimeout[i] = 0;
+			{
+				nonlaggers++;
+
+				// you aren't lagging, but you aren't free yet. In case you'll keep spiking, we just make the timer go back down. (Very unstable net must still get kicked).
+				if (pingtimeout[i] > 0)
+					pingtimeout[i]--;
+			}
 
 		}
 
 		//kick lagging players... unless everyone but the server's ping sucks.
 		//in that case, it is probably the server's fault.
-		if (numlaggers < D_NumPlayers() - 1)
+		// Always kick TICQUEUE-overrunners, too.
 		{
-			for (i = 1; i < MAXPLAYERS; i++)
+			UINT8 minimumkicklevel = (nonlaggers > 0) ? PINGKICK_LIMIT : PINGKICK_TICQUEUE;
+			for (i = 0; i < MAXPLAYERS; i++)
 			{
-				if (playeringame[i] && laggers[i])
+				XBOXSTATIC char buf[2];
+
+				if (!playeringame[i] || pingkick[i] < minimumkicklevel)
+					continue;
+
+				if (pingkick[i] == PINGKICK_LIMIT)
 				{
-					pingtimeout[i]++;
-					if (pingtimeout[i] > cv_pingtimeout.value)	// ok your net has been bad for too long, you deserve to die.
-					{
-						XBOXSTATIC char buf[2];
-
-						pingtimeout[i] = 0;
-
-						buf[0] = (char)i;
-						buf[1] = KICK_MSG_PING_HIGH;
-						SendNetXCmd(XD_KICK, &buf, 2);
-					}
+					// Don't kick on ping alone if we haven't reached our threshold yet.
+					if (++pingtimeout[i] < cv_pingtimeout.value)
+						continue;
 				}
-				else	// you aren't lagging, but you aren't free yet. In case you'll keep spiking, we just make the timer go back down. (Very unstable net must still get kicked).
-					pingtimeout[i] = (pingtimeout[i] == 0 ? 0 : pingtimeout[i]-1);
+
+				pingtimeout[i] = 0;
+
+				buf[0] = (char)i;
+				buf[1] = KICK_MSG_PING_HIGH;
+				SendNetXCmd(XD_KICK, &buf, 2);
 			}
 		}
 	}
@@ -6000,8 +6102,11 @@ static inline void PingUpdate(void)
 		if (nodeingame[i])
 			HSendPacket(i, true, 0, sizeof(INT32) * (MAXPLAYERS+1));
 
-	pingmeasurecount = 1; //Reset count
+	pingmeasurecount = 0; //Reset count
 }
+
+#undef PINGKICK_DANGER
+#undef PINGKICK_LIMIT
 
 static tic_t gametime = 0;
 
@@ -6093,6 +6198,9 @@ FILESTAMP
 	SV_FileSendTicker();
 }
 
+// If a tree falls in the forest but nobody is around to hear it, does it make a tic?
+#define DEDICATEDIDLETIME (10*TICRATE)
+
 void NetUpdate(void)
 {
 	static tic_t resptime = 0;
@@ -6105,6 +6213,55 @@ void NetUpdate(void)
 
 	if (realtics <= 0) // nothing new to update
 		return;
+
+#ifdef DEDICATEDIDLETIME
+	if (server && dedicated && gamestate == GS_LEVEL)
+	{
+		static tic_t dedicatedidle = 0;
+
+		for (i = 1; i < MAXNETNODES; ++i)
+			if (nodeingame[i])
+			{
+				if (dedicatedidle == DEDICATEDIDLETIME)
+				{
+					CONS_Printf("DEDICATED: Awakening from idle (Node %d detected...)\n", i);
+					dedicatedidle = 0;
+				}
+				break;
+			}
+
+		if (i == MAXNETNODES)
+		{
+			if (leveltime == 2)
+			{
+				// On next tick...
+				dedicatedidle = DEDICATEDIDLETIME-1;
+			}
+			else if (dedicatedidle == DEDICATEDIDLETIME)
+			{
+				if (D_GetExistingTextcmd(gametic, 0) || D_GetExistingTextcmd(gametic+1, 0))
+				{
+					CONS_Printf("DEDICATED: Awakening from idle (Netxcmd detected...)\n");
+					dedicatedidle = 0;
+				}
+				else
+				{
+					realtics = 0;
+				}
+			}
+			else if (++dedicatedidle == DEDICATEDIDLETIME)
+			{
+				const char *idlereason = "at round start";
+				if (leveltime > 3)
+					idlereason = va("for %d seconds", dedicatedidle/TICRATE);
+
+				CONS_Printf("DEDICATED: No nodes %s, idling...\n", idlereason);
+				realtics = 0;
+			}
+		}
+	}
+#endif
+
 	if (realtics > 5)
 	{
 		if (server)
@@ -6147,7 +6304,7 @@ FILESTAMP
 	}
 	else
 	{
-		if (!demo.playback)
+		if (!demo.playback && realtics > 0)
 		{
 			INT32 counts;
 
@@ -6171,6 +6328,7 @@ FILESTAMP
 			// Do not make tics while resynching
 			if (counts != -666)
 			{
+				// See also PingUpdate
 				if (maketic + counts >= firstticstosend + TICQUEUE)
 					counts = firstticstosend+TICQUEUE-maketic-1;
 
@@ -6221,6 +6379,9 @@ INT32 D_NumPlayers(void)
 
 tic_t GetLag(INT32 node)
 {
+	// If the client has caught up to the server -- say, during a wipe -- lag is meaningless.
+	if (nettics[node] > gametic)
+		return 0;
 	return gametic - nettics[node];
 }
 

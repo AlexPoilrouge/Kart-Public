@@ -23,7 +23,9 @@
 #include "lua_script.h"
 #include "lua_hook.h"
 #include "k_kart.h"
+#include "r_main.h"
 #include "r_fps.h"
+#include "i_video.h" // rendermode
 
 // Object place
 #include "m_cheat.h"
@@ -231,6 +233,7 @@ void P_RemoveThinkerDelayed(void *pthinker)
 			 * thinker->prev->next = thinker->next */
 			(next->prev = currentthinker = thinker->prev)->next = next;
 		}
+		R_DestroyLevelInterpolators(thinker);
 		Z_Free(thinker);
 	}
 }
@@ -770,10 +773,12 @@ void P_Ticker(boolean run)
 
 		if (demo.recording)
 		{
+			INT32 axis = JoyAxis(AXISLOOKBACK, 1);
+
 			G_WriteAllGhostTics();
 
 			if (cv_recordmultiplayerdemos.value && (demo.savemode == DSM_NOTSAVING || demo.savemode == DSM_WILLAUTOSAVE))
-				if (demo.savebutton && demo.savebutton + 3*TICRATE < leveltime && InputDown(gc_lookback, 1))
+				if (demo.savebutton && demo.savebutton + 3*TICRATE < leveltime && (InputDown(gc_lookback, 1) || (cv_usejoystick.value && axis > 0)))
 					demo.savemode = DSM_TITLEENTRY;
 		}
 		else if (demo.playback) // Use Ghost data for consistency checks.
@@ -810,6 +815,25 @@ void P_Ticker(boolean run)
 	{
 		R_UpdateLevelInterpolators();
 		R_UpdateViewInterpolation();
+
+		// Hack: ensure newview is assigned every tic.
+		// Ensures view interpolation is T-1 to T in poor network conditions
+		// We need a better way to assign view state decoupled from game logic
+		if (rendermode != render_none)
+		{
+			for (i = 0; i <= splitscreen; i++)
+			{
+				player_t *player = &players[displayplayers[i]];
+				boolean isSkyVisibleForPlayer = skyVisiblePerPlayer[i];
+				if (!player->mo)
+					continue;
+				if (isSkyVisibleForPlayer && skyboxmo[0] && cv_skybox.value)
+				{
+					R_SkyboxFrame(player);
+				}
+				R_SetupFrame(player, (skyboxmo[0] && cv_skybox.value));
+			}
+		}
 	}
 
 	P_MapEnd();

@@ -157,6 +157,8 @@ UINT8 maplistoption = 0;
 static char joystickInfo[8][29];
 #ifndef NONET
 static UINT32 serverlistpage;
+static UINT32 oldserverlistpage;
+static float serverlistslidex;
 #endif
 
 //static saveinfo_t savegameinfo[MAXSAVEGAMES]; // Extra info about the save games.
@@ -1163,7 +1165,10 @@ static menuitem_t OP_Joystick1Menu[] =
 	{IT_STRING | IT_CVAR,  NULL, "Brake"              , &cv_brakeaxis        , 60},
 	{IT_STRING | IT_CVAR,  NULL, "Drift"              , &cv_driftaxis        , 70},
 	{IT_STRING | IT_CVAR,  NULL, "Use Item"           , &cv_fireaxis         , 80},
-	{IT_STRING | IT_CVAR,  NULL, "Look Up/Down"       , &cv_lookaxis         , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Look Backward"      , &cv_lookbackaxis     , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Spec. Look Up/Down" , &cv_lookaxis         , 100},
+	{IT_STRING | IT_CVAR,  NULL, "X deadzone"         , &cv_xdeadzone        , 120},
+	{IT_STRING | IT_CVAR,  NULL, "Y deadzone"         , &cv_ydeadzone        , 130},
 };
 
 static menuitem_t OP_Joystick2Menu[] =
@@ -1175,7 +1180,10 @@ static menuitem_t OP_Joystick2Menu[] =
 	{IT_STRING | IT_CVAR,  NULL, "Brake"              , &cv_brakeaxis2       , 60},
 	{IT_STRING | IT_CVAR,  NULL, "Drift"              , &cv_driftaxis2       , 70},
 	{IT_STRING | IT_CVAR,  NULL, "Use Item"           , &cv_fireaxis2        , 80},
-	{IT_STRING | IT_CVAR,  NULL, "Look Up/Down"       , &cv_lookaxis2        , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Look Backward"      , &cv_lookbackaxis2    , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Spec. Look Up/Down" , &cv_lookaxis2        , 100},
+	{IT_STRING | IT_CVAR,  NULL, "X deadzone"         , &cv_xdeadzone2       , 120},
+	{IT_STRING | IT_CVAR,  NULL, "Y deadzone"         , &cv_ydeadzone2       , 130},
 };
 
 static menuitem_t OP_Joystick3Menu[] =
@@ -1187,7 +1195,10 @@ static menuitem_t OP_Joystick3Menu[] =
 	{IT_STRING | IT_CVAR,  NULL, "Brake"              , &cv_brakeaxis3       , 60},
 	{IT_STRING | IT_CVAR,  NULL, "Drift"              , &cv_driftaxis3       , 70},
 	{IT_STRING | IT_CVAR,  NULL, "Use Item"           , &cv_fireaxis3        , 80},
-	{IT_STRING | IT_CVAR,  NULL, "Look Up/Down"       , &cv_lookaxis3        , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Look Backward"      , &cv_lookbackaxis3    , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Spec. Look Up/Down" , &cv_lookaxis3        , 100},
+	{IT_STRING | IT_CVAR,  NULL, "X deadzone"         , &cv_xdeadzone3       , 120},
+	{IT_STRING | IT_CVAR,  NULL, "Y deadzone"         , &cv_ydeadzone3       , 130},
 };
 
 static menuitem_t OP_Joystick4Menu[] =
@@ -1199,7 +1210,10 @@ static menuitem_t OP_Joystick4Menu[] =
 	{IT_STRING | IT_CVAR,  NULL, "Brake"              , &cv_brakeaxis4       , 60},
 	{IT_STRING | IT_CVAR,  NULL, "Drift"              , &cv_driftaxis4       , 70},
 	{IT_STRING | IT_CVAR,  NULL, "Use Item"           , &cv_fireaxis4        , 80},
-	{IT_STRING | IT_CVAR,  NULL, "Look Up/Down"       , &cv_lookaxis4        , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Look Backward"      , &cv_lookbackaxis4    , 90},
+	{IT_STRING | IT_CVAR,  NULL, "Spec. Look Up/Down" , &cv_lookaxis4        , 100},
+	{IT_STRING | IT_CVAR,  NULL, "X deadzone"         , &cv_xdeadzone4       , 110},
+	{IT_STRING | IT_CVAR,  NULL, "Y deadzone"         , &cv_ydeadzone4       , 120},
 };
 
 static menuitem_t OP_JoystickSetMenu[] =
@@ -2381,7 +2395,7 @@ static void M_ChangeCvar(INT32 choice)
 	{
 		if (cv == &cv_playercolor)
 		{
-			SINT8 skinno = R_SkinAvailable(cv_chooseskin.string);
+			INT32 skinno = R_SkinAvailable(cv_chooseskin.string);
 			if (skinno != -1)
 				CV_SetValue(cv,skins[skinno].prefcolor);
 			return;
@@ -2520,8 +2534,8 @@ boolean M_Responder(event_t *ev)
 {
 	INT32 ch = -1;
 //	INT32 i;
-	static tic_t joywait = 0, mousewait = 0;
-	static INT32 pjoyx = 0, pjoyy = 0;
+	static tic_t joywaitx = 0, joywaity = 0, joywaitaccel = 0, mousewait = 0;
+	static INT32 pjoyx = 0, pjoyy = 0, pjoyaccel = 0;
 	static INT32 pmousex = 0, pmousey = 0;
 	static INT32 lastx = 0, lasty = 0;
 	void (*routine)(INT32 choice); // for some casting problem
@@ -2572,47 +2586,76 @@ boolean M_Responder(event_t *ev)
 	}
 	else if (menuactive)
 	{
-		if (ev->type == ev_joystick  && ev->data1 == 0 && joywait < I_GetTime())
+		tic_t thistime = I_GetTime();
+		if (ev->type == ev_joystick)
 		{
-			const INT32 jdeadzone = ((JOYAXISRANGE-1) * cv_deadzone.value) >> FRACBITS;
-			if (ev->data3 != INT32_MAX)
+			const INT32 jxdeadzone = ((JOYAXISRANGE-1) * max(cv_xdeadzone.value, FRACUNIT/2)) >> FRACBITS;
+			const INT32 jydeadzone = ((JOYAXISRANGE-1) * max(cv_ydeadzone.value, FRACUNIT/2)) >> FRACBITS;
+			INT32 accelaxis = abs(cv_moveaxis.value);
+			if (ev->data1 == 0)
 			{
-				if (Joystick.bGamepadStyle || abs(ev->data3) > jdeadzone)
+				if (ev->data3 != INT32_MAX)
 				{
-					if (ev->data3 < 0 && pjoyy >= 0)
+					if (Joystick.bGamepadStyle || abs(ev->data3) > jydeadzone)
 					{
-						ch = KEY_UPARROW;
-						joywait = I_GetTime() + NEWTICRATE/7;
+						if (joywaity < thistime
+							&& (pjoyy == 0 || (ev->data3 < 0) != (pjoyy < 0))) // no previous direction OR change direction
+						{
+							ch = (ev->data3 < 0) ? KEY_UPARROW : KEY_DOWNARROW;
+							joywaity = thistime + NEWTICRATE/7;
+						}
+						pjoyy = ev->data3;
 					}
-					else if (ev->data3 > 0 && pjoyy <= 0)
-					{
-						ch = KEY_DOWNARROW;
-						joywait = I_GetTime() + NEWTICRATE/7;
-					}
-					pjoyy = ev->data3;
+					else
+						pjoyy = 0;
 				}
-				else
-					pjoyy = 0;
-			}
 
-			if (ev->data2 != INT32_MAX)
-			{
-				if (Joystick.bGamepadStyle || abs(ev->data2) > jdeadzone)
+				if (ev->data2 != INT32_MAX && joywaitx < thistime)
 				{
-					if (ev->data2 < 0 && pjoyx >= 0)
+					if (Joystick.bGamepadStyle || abs(ev->data2) > jxdeadzone)
 					{
-						ch = KEY_LEFTARROW;
-						joywait = I_GetTime() + NEWTICRATE/17;
+						if (joywaitx < thistime
+							&& (pjoyx == 0 || (ev->data2 < 0) != (pjoyx < 0))) // no previous direction OR change direction
+						{
+							ch = (ev->data2 < 0) ? KEY_LEFTARROW : KEY_RIGHTARROW;
+							joywaitx = thistime + NEWTICRATE/7;
+						}
+						pjoyx = ev->data2;
 					}
-					else if (ev->data2 > 0 && pjoyx <= 0)
-					{
-						ch = KEY_RIGHTARROW;
-						joywait = I_GetTime() + NEWTICRATE/17;
-					}
-					pjoyx = ev->data2;
+					else
+						pjoyx = 0;
 				}
-				else
-					pjoyx = 0;
+			}
+			else if (!(accelaxis > JOYAXISSET*2 || accelaxis == 0))
+			{
+				// The following borrows heavily from Joy1Axis.
+				const boolean xmode = (accelaxis%2);
+				INT32 retaxis = 0;
+				if (!xmode)
+					accelaxis--;
+				accelaxis /= 2;
+				if (ev->data1 == accelaxis)
+				{
+					const INT32 jacceldeadzone = xmode ? jxdeadzone : jydeadzone;
+					retaxis = xmode ? ev->data2 : ev->data3;
+					if (retaxis != INT32_MAX)
+					{
+						if (cv_moveaxis.value < 0)
+							retaxis = -retaxis;
+
+						if (Joystick.bGamepadStyle || retaxis > jacceldeadzone)
+						{
+							if (joywaitaccel < thistime && retaxis > pjoyaccel) // only on upwards event
+							{
+								ch = KEY_ENTER;
+								joywaitaccel = thistime + NEWTICRATE/3;
+							}
+							pjoyaccel = retaxis;
+						}
+						else
+							pjoyaccel = 0;
+					}
+				}
 			}
 		}
 		else if (ev->type == ev_mouse && mousewait < I_GetTime())
@@ -3471,6 +3514,8 @@ void M_Ticker(void)
 	}
 	I_unlock_mutex(ms_ServerList_mutex);
 #endif
+
+	CL_TimeoutServerList();
 }
 
 //
@@ -5602,6 +5647,18 @@ static void DrawReplayHutReplayInfo(void)
 		if (demolist[dir_on[menudepthleft]].gametype == GT_RACE)
 		{
 			V_DrawThinString(x, y+39, V_SNAPTOTOP|highlightflags, "TIME");
+		}
+		else
+		{
+			V_DrawThinString(x, y+39, V_SNAPTOTOP|highlightflags, "SCORE");
+		}
+
+		if (demolist[dir_on[menudepthleft]].standings[0].timeorscore == (UINT32_MAX-1))
+		{
+			V_DrawThinString(x+32, y+40-1, V_SNAPTOTOP, "NO CONTEST");
+		}
+		else if (demolist[dir_on[menudepthleft]].gametype == GT_RACE)
+		{
 			V_DrawRightAlignedString(x+84, y+40, V_SNAPTOTOP, va("%d'%02d\"%02d",
 											G_TicsToMinutes(demolist[dir_on[menudepthleft]].standings[0].timeorscore, true),
 											G_TicsToSeconds(demolist[dir_on[menudepthleft]].standings[0].timeorscore),
@@ -5610,12 +5667,11 @@ static void DrawReplayHutReplayInfo(void)
 		}
 		else
 		{
-			V_DrawThinString(x, y+39, V_SNAPTOTOP|highlightflags, "SCORE");
 			V_DrawString(x+32, y+40, V_SNAPTOTOP, va("%d", demolist[dir_on[menudepthleft]].standings[0].timeorscore));
 		}
 
 		// Character face!
-		if (W_CheckNumForName(skins[demolist[dir_on[menudepthleft]].standings[0].skin].facewant) != LUMPERROR)
+		if (demolist[dir_on[menudepthleft]].standings[0].skin < numskins && W_CheckNumForName(skins[demolist[dir_on[menudepthleft]].standings[0].skin].facewant) != LUMPERROR)
 		{
 			patch = facewantprefix[demolist[dir_on[menudepthleft]].standings[0].skin];
 			colormap = R_GetTranslationColormap(
@@ -5815,7 +5871,7 @@ static void M_DrawReplayStartMenu(void)
 			V_DrawString(BASEVIDWIDTH-92, STARTY + i*20 + 9, V_SNAPTOTOP, va("%d", demolist[dir_on[menudepthleft]].standings[i].timeorscore));
 
 		// Character face!
-		if (W_CheckNumForName(skins[demolist[dir_on[menudepthleft]].standings[i].skin].facerank) != LUMPERROR)
+		if (demolist[dir_on[menudepthleft]].standings[i].skin < numskins && W_CheckNumForName(skins[demolist[dir_on[menudepthleft]].standings[i].skin].facerank) != LUMPERROR)
 		{
 			patch = facerankprefix[demolist[dir_on[menudepthleft]].standings[i].skin];
 			colormap = R_GetTranslationColormap(
@@ -6391,7 +6447,7 @@ boolean firstDismissedRulesThisBoot = true;
 void M_PopupMasterServerRules(void)
 {
 #ifdef MASTERSERVER
-	if (cv_advertise.value && (serverrunning || currentMenu == &MP_ServerDef) && firstDismissedRulesThisBoot)
+	if (cv_advertise.value && ((serverrunning && netgame) || currentMenu == &MP_ServerDef) && firstDismissedRulesThisBoot)
 	{
 		char *rules = GetMasterServerRules();
 
@@ -8572,12 +8628,18 @@ static void M_HandleServerPage(INT32 choice)
 		case KEY_RIGHTARROW:
 			S_StartSound(NULL, sfx_menu1);
 			if ((serverlistpage + 1) * SERVERS_PER_PAGE < serverlistcount)
-				serverlistpage++;
+			{
+				oldserverlistpage = serverlistpage++;
+				serverlistslidex = BASEVIDWIDTH;
+			}
 			break;
 		case KEY_LEFTARROW:
 			S_StartSound(NULL, sfx_menu1);
 			if (serverlistpage > 0)
-				serverlistpage--;
+			{
+				oldserverlistpage = serverlistpage--;
+				serverlistslidex = -(BASEVIDWIDTH);
+			}
 			break;
 
 		default:
@@ -8604,17 +8666,10 @@ static void M_Refresh(INT32 choice)
 {
 	(void)choice;
 
-	// Display a little "please wait" message.
-	M_DrawTextBox(52, BASEVIDHEIGHT/2-10, 25, 3);
-	V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT/2, 0, "Searching for servers...");
-	V_DrawCenteredString(BASEVIDWIDTH/2, (BASEVIDHEIGHT/2)+12, 0, "Please wait.");
-	I_OsPolling();
-	I_UpdateNoBlit();
-	if (rendermode == render_soft)
-		I_FinishUpdate(); // page flip or blit buffer
-
 	// first page of servers
 	serverlistpage = 0;
+
+	CL_UpdateServerList();
 
 #ifdef MASTERSERVER
 #ifdef HAVE_THREADS
@@ -8622,18 +8677,101 @@ static void M_Refresh(INT32 choice)
 #else/*HAVE_THREADS*/
 	Fetch_servers_thread(NULL);
 #endif/*HAVE_THREADS*/
-#else/*MASTERSERVER*/
-	CL_UpdateServerList();
 #endif/*MASTERSERVER*/
+}
+
+static void M_DrawServerCountAndHorizontalBar(void)
+{
+	const char *text;
+	INT32 radius;
+	INT32 center = BASEVIDWIDTH/2;
+
+	switch (M_GetWaitingMode())
+	{
+		case M_WAITING_VERSION:
+			text = "Checking for updates";
+			break;
+
+		case M_WAITING_SERVERS:
+			text = "Loading server list";
+			break;
+
+		default:
+			if (serverlistultimatecount > serverlistcount)
+			{
+				text = va("%d/%d servers found%.*s",
+						serverlistcount,
+						serverlistultimatecount,
+						I_GetTime() / NEWTICRATE % 4, "...");
+			}
+			else if (serverlistcount > 0)
+			{
+				text = va("%d servers found", serverlistcount);
+			}
+			else
+			{
+				text = "No servers found";
+			}
+	}
+
+	radius = V_StringWidth(text, 0) / 2;
+
+	V_DrawCenteredString(center, currentMenu->y+28, 0, text);
+
+	// Horizontal line!
+	V_DrawFill(1, currentMenu->y+32, center - radius - 2, 1, 0);
+	V_DrawFill(center + radius + 2, currentMenu->y+32, BASEVIDWIDTH - 1, 1, 0);
+}
+
+static void M_DrawServerLines(INT32 x, INT32 page)
+{
+	UINT16 i;
+	const char *gt = "Unknown";
+	const char *spd = "";
+
+	for (i = 0; i < min(serverlistcount - page * SERVERS_PER_PAGE, SERVERS_PER_PAGE); i++)
+	{
+		INT32 slindex = i + page * SERVERS_PER_PAGE;
+		UINT32 globalflags = ((serverlist[slindex].info.numberofplayer >= serverlist[slindex].info.maxplayer) ? V_TRANSLUCENT : 0)
+			|((itemOn == FIRSTSERVERLINE+i) ? highlightflags : 0)|V_ALLOWLOWERCASE;
+
+		V_DrawString(x, S_LINEY(i), globalflags, serverlist[slindex].info.servername);
+
+		// Don't use color flags intentionally, the global yellow color will auto override the text color code
+		if (serverlist[slindex].info.modifiedgame)
+			V_DrawSmallString(x+202, S_LINEY(i)+8, globalflags, "\x85" "Mod");
+		if (serverlist[slindex].info.cheatsenabled)
+			V_DrawSmallString(x+222, S_LINEY(i)+8, globalflags, "\x83" "Cheats");
+
+		V_DrawSmallString(x, S_LINEY(i)+8, globalflags,
+		                     va("Ping: %u", (UINT32)LONG(serverlist[slindex].info.time)));
+
+		gt = "Unknown";
+		if (serverlist[slindex].info.gametype < NUMGAMETYPES)
+			gt = Gametype_Names[serverlist[slindex].info.gametype];
+
+		V_DrawSmallString(x+46,S_LINEY(i)+8, globalflags,
+		                         va("Players: %02d/%02d", serverlist[slindex].info.numberofplayer, serverlist[slindex].info.maxplayer));
+
+		V_DrawSmallString(x+112, S_LINEY(i)+8, globalflags, gt);
+
+		// display game speed for race gametypes
+		if (serverlist[slindex].info.gametype == GT_RACE)
+		{
+			spd = kartspeed_cons_t[serverlist[slindex].info.kartvars & SV_SPEEDMASK].strvalue;
+
+			V_DrawSmallString(x+132, S_LINEY(i)+8, globalflags, va("(%s Speed)", spd));
+		}
+
+		MP_ConnectMenu[i+FIRSTSERVERLINE].status = IT_STRING | IT_CALL;
+	}
 }
 
 static void M_DrawConnectMenu(void)
 {
 	UINT16 i;
-	const char *gt = "Unknown";
-	const char *spd = "";
 	INT32 numPages = (serverlistcount+(SERVERS_PER_PAGE-1))/SERVERS_PER_PAGE;
-	int waiting;
+	INT32 mservflags = V_ALLOWLOWERCASE;
 
 	for (i = FIRSTSERVERLINE; i < min(localservercount, SERVERS_PER_PAGE)+FIRSTSERVERLINE; i++)
 		MP_ConnectMenu[i].status = IT_STRING | IT_SPACE;
@@ -8644,79 +8782,44 @@ static void M_DrawConnectMenu(void)
 	// Page num
 	V_DrawRightAlignedString(BASEVIDWIDTH - currentMenu->x, currentMenu->y + MP_ConnectMenu[mp_connect_page].alphaKey,
 	                         highlightflags, va("%u of %d", serverlistpage+1, numPages));
-	
+
 	// Did you change the Server Browser address? Have a little reminder.
-	int mservflags = V_ALLOWLOWERCASE;
 	if (CV_IsSetToDefault(&cv_masterserver))
 		mservflags = mservflags|highlightflags|V_30TRANS;
 	else
 		mservflags = mservflags|warningflags;
-	V_DrawRightAlignedSmallString(BASEVIDWIDTH - currentMenu->x, currentMenu->y+14 + MP_ConnectMenu[mp_connect_page].alphaKey,
+	V_DrawRightAlignedSmallString(BASEVIDWIDTH - currentMenu->x, currentMenu->y+3 + MP_ConnectMenu[mp_connect_refresh].alphaKey,
 	                         mservflags, va("MS: %s", cv_masterserver.string));
 
-	// Horizontal line!
-	V_DrawFill(1, currentMenu->y+32, 318, 1, 0);
+	M_DrawServerCountAndHorizontalBar();
 
-	if (serverlistcount <= 0)
-		V_DrawString(currentMenu->x,currentMenu->y+SERVERHEADERHEIGHT, 0, "No servers found");
-	else
-	for (i = 0; i < min(serverlistcount - serverlistpage * SERVERS_PER_PAGE, SERVERS_PER_PAGE); i++)
+	// When switching pages, slide the old page and the
+	// new page across the screen
+	if (oldserverlistpage != serverlistpage)
 	{
-		INT32 slindex = i + serverlistpage * SERVERS_PER_PAGE;
-		UINT32 globalflags = ((serverlist[slindex].info.numberofplayer >= serverlist[slindex].info.maxplayer) ? V_TRANSLUCENT : 0)
-			|((itemOn == FIRSTSERVERLINE+i) ? highlightflags : 0)|V_ALLOWLOWERCASE;
+		const float ease = serverlistslidex / 2.f;
+		const INT32 offx = serverlistslidex > 0 ? BASEVIDWIDTH : -(BASEVIDWIDTH);
+		const INT32 x = (FLOAT_TO_FIXED(serverlistslidex) + ease * rendertimefrac) / FRACUNIT;
 
-		V_DrawString(currentMenu->x, S_LINEY(i), globalflags, serverlist[slindex].info.servername);
+		M_DrawServerLines(currentMenu->x + x - offx, oldserverlistpage);
+		M_DrawServerLines(currentMenu->x + x, serverlistpage);
 
-		// Don't use color flags intentionally, the global yellow color will auto override the text color code
-		if (serverlist[slindex].info.modifiedgame)
-			V_DrawSmallString(currentMenu->x+202, S_LINEY(i)+8, globalflags, "\x85" "Mod");
-		if (serverlist[slindex].info.cheatsenabled)
-			V_DrawSmallString(currentMenu->x+222, S_LINEY(i)+8, globalflags, "\x83" "Cheats");
-
-		V_DrawSmallString(currentMenu->x, S_LINEY(i)+8, globalflags,
-		                     va("Ping: %u", (UINT32)LONG(serverlist[slindex].info.time)));
-
-		gt = "Unknown";
-		if (serverlist[slindex].info.gametype < NUMGAMETYPES)
-			gt = Gametype_Names[serverlist[slindex].info.gametype];
-
-		V_DrawSmallString(currentMenu->x+46,S_LINEY(i)+8, globalflags,
-		                         va("Players: %02d/%02d", serverlist[slindex].info.numberofplayer, serverlist[slindex].info.maxplayer));
-
-		V_DrawSmallString(currentMenu->x+112, S_LINEY(i)+8, globalflags, gt);
-
-		// display game speed for race gametypes
-		if (serverlist[slindex].info.gametype == GT_RACE)
+		if (interpTimerHackAllow)
 		{
-			spd = kartspeed_cons_t[serverlist[slindex].info.kartvars & SV_SPEEDMASK].strvalue;
+			serverlistslidex -= ease;
 
-			V_DrawSmallString(currentMenu->x+132, S_LINEY(i)+8, globalflags, va("(%s Speed)", spd));
+			if ((INT32)serverlistslidex == 0)
+				oldserverlistpage = serverlistpage;
 		}
-
-		MP_ConnectMenu[i+FIRSTSERVERLINE].status = IT_STRING | IT_CALL;
+	}
+	else
+	{
+		M_DrawServerLines(currentMenu->x, serverlistpage);
 	}
 
 	localservercount = serverlistcount;
 
 	M_DrawGenericMenu();
-
-	waiting = M_GetWaitingMode();
-
-	if (waiting)
-	{
-		const char *message;
-
-		if (waiting == M_WAITING_VERSION)
-			message = "Checking for updates...";
-		else
-			message = "Searching for servers...";
-
-		// Display a little "please wait" message.
-		M_DrawTextBox(52, BASEVIDHEIGHT/2-10, 25, 3);
-		V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT/2, 0, message);
-		V_DrawCenteredString(BASEVIDWIDTH/2, (BASEVIDHEIGHT/2)+12, 0, "Please wait.");
-	}
 }
 
 static boolean M_CancelConnect(void)
@@ -8843,6 +8946,9 @@ static void M_ConnectMenu(INT32 choice)
 
 	// first page of servers
 	serverlistpage = 0;
+
+	CL_UpdateServerList();
+
 	M_SetupNextMenu(&MP_ConnectDef);
 	itemOn = 0;
 
@@ -10717,6 +10823,7 @@ static void M_ResetControlsResponse(INT32 ch)
 			CV_StealthSet(&cv_lookaxis4, cv_lookaxis4.defaultvalue);
 			CV_StealthSet(&cv_fireaxis4, cv_fireaxis4.defaultvalue);
 			CV_StealthSet(&cv_driftaxis4, cv_driftaxis4.defaultvalue);
+			CV_StealthSet(&cv_lookbackaxis4, cv_lookbackaxis4.defaultvalue);
 			break;
 		case 3:
 			CV_StealthSet(&cv_usejoystick3, cv_usejoystick3.defaultvalue);
@@ -10727,6 +10834,7 @@ static void M_ResetControlsResponse(INT32 ch)
 			CV_StealthSet(&cv_lookaxis3, cv_lookaxis3.defaultvalue);
 			CV_StealthSet(&cv_fireaxis3, cv_fireaxis3.defaultvalue);
 			CV_StealthSet(&cv_driftaxis3, cv_driftaxis3.defaultvalue);
+			CV_StealthSet(&cv_lookbackaxis3, cv_lookbackaxis3.defaultvalue);
 			break;
 		case 2:
 			CV_StealthSet(&cv_usejoystick2, cv_usejoystick2.defaultvalue);
@@ -10737,6 +10845,7 @@ static void M_ResetControlsResponse(INT32 ch)
 			CV_StealthSet(&cv_lookaxis2, cv_lookaxis2.defaultvalue);
 			CV_StealthSet(&cv_fireaxis2, cv_fireaxis2.defaultvalue);
 			CV_StealthSet(&cv_driftaxis2, cv_driftaxis2.defaultvalue);
+			CV_StealthSet(&cv_lookbackaxis2, cv_lookbackaxis2.defaultvalue);
 			break;
 		case 1:
 		default:
@@ -10748,6 +10857,7 @@ static void M_ResetControlsResponse(INT32 ch)
 			CV_StealthSet(&cv_lookaxis, cv_lookaxis.defaultvalue);
 			CV_StealthSet(&cv_fireaxis, cv_fireaxis.defaultvalue);
 			CV_StealthSet(&cv_driftaxis, cv_driftaxis.defaultvalue);
+			CV_StealthSet(&cv_lookbackaxis, cv_lookbackaxis.defaultvalue);
 			break;
 	}
 

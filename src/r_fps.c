@@ -210,6 +210,14 @@ void R_ResetViewInterpolation(UINT8 p)
 	}
 }
 
+void R_RelativeTeleportViewInterpolation(UINT8 p, fixed_t xdiff, fixed_t ydiff, fixed_t zdiff, angle_t angdiff)
+{
+	pview_old[p].x += xdiff;
+	pview_old[p].y += ydiff;
+	pview_old[p].z += zdiff;
+	pview_old[p].angle += angdiff;
+}
+
 void R_SetViewContext(enum viewcontext_e _viewcontext)
 {
 	UINT8 i = 0;
@@ -684,7 +692,7 @@ void R_RemoveMobjInterpolator(mobj_t *mobj)
 
 	if (interpolated_mobjs_len == 0) return;
 
-	for (i = 0; i < interpolated_mobjs_len - 1; i++)
+	for (i = 0; i < interpolated_mobjs_len; i++)
 	{
 		if (interpolated_mobjs[i] == mobj)
 		{
