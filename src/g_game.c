@@ -8788,7 +8788,8 @@ boolean G_DemoTitleResponder(event_t *ev)
 		if (len < 64)
 		{
 			demo.titlename[len+1] = 0;
-			demo.titlename[len] = CON_ShiftChar(ch);
+			//demo.titlename[len] = CON_ShiftChar(ch);
+			demo.titlename[len] =  CON_ShitAndAltGrChar(ch);
 		}
 	}
 	else if (ch == KEY_BACKSPACE)
