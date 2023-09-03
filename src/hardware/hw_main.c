@@ -149,6 +149,23 @@ static sector_t *gr_backsector;
 
 boolean gr_shadersavailable = true;
 
+// Render stats
+ps_metric_t ps_hw_nodesorttime = {0};
+ps_metric_t ps_hw_nodedrawtime = {0};
+ps_metric_t ps_hw_spritesorttime = {0};
+ps_metric_t ps_hw_spritedrawtime = {0};
+
+// Render stats for batching
+ps_metric_t ps_hw_numpolys = {0};
+ps_metric_t ps_hw_numverts = {0};
+ps_metric_t ps_hw_numcalls = {0};
+ps_metric_t ps_hw_numshaders = {0};
+ps_metric_t ps_hw_numtextures = {0};
+ps_metric_t ps_hw_numpolyflags = {0};
+ps_metric_t ps_hw_numcolors = {0};
+ps_metric_t ps_hw_batchsorttime = {0};
+ps_metric_t ps_hw_batchdrawtime = {0};
+
 // ==========================================================================
 // View position
 // ==========================================================================
@@ -2769,6 +2786,9 @@ void HWR_Subsector(size_t num)
 			po = (polyobj_t *)(po->link.next);
 		}
 
+		// for render stats
+		ps_numpolyobjects.value.i += numpolys;
+
 		// Sort polyobjects
 		R_SortPolyObjects(sub);
 
@@ -2827,6 +2847,8 @@ void HWR_RenderBSPNode(INT32 bspnum)
 
 	// Decide which side the view point is on
 	INT32 side;
+
+	ps_numbspcalls.value.i++;
 
 	// Found a subsector?
 	if (bspnum & NF_SUBSECTOR)
@@ -3997,6 +4019,8 @@ void HWR_RenderDrawNodes(void)
 	// that is already lying around. This should all be in some sort of linked list or lists.
 	sortindex = Z_Calloc(sizeof(size_t) * (numplanes + numpolyplanes + numwalls), PU_STATIC, NULL);
 
+	PS_START_TIMING(ps_hw_nodesorttime);
+
 	for (i = 0; i < numplanes; i++, p++)
 	{
 		sortnode[p].plane = &planeinfo[i];
@@ -4014,6 +4038,8 @@ void HWR_RenderDrawNodes(void)
 		sortnode[p].wall = &wallinfo[i];
 		sortindex[p] = p;
 	}
+
+	ps_numdrawnodes.value.i = p;
 
 	// p is the number of stuff to sort
 
@@ -4057,6 +4083,10 @@ void HWR_RenderDrawNodes(void)
 		}
 	}
 
+	PS_STOP_TIMING(ps_hw_nodesorttime);
+
+	PS_START_TIMING(ps_hw_nodedrawtime);
+
 	// Okay! Let's draw it all! Woo!
 	HWD.pfnSetTransform(&atransform);
 	HWD.pfnSetShader(0);
@@ -4091,6 +4121,8 @@ void HWR_RenderDrawNodes(void)
 				sortnode[sortindex[i]].wall->lightlevel, sortnode[sortindex[i]].wall->wallcolormap);
 		}
 	}
+
+	PS_STOP_TIMING(ps_hw_nodedrawtime);
 
 	numwalls = 0;
 	numplanes = 0;
@@ -4864,6 +4896,10 @@ void HWR_RenderFrame(INT32 viewnumber, player_t *player, boolean skybox)
 
 	if (cv_grbatching.value)
 		HWD.pfnStartBatching();
+	
+	ps_numbspcalls.value.i = 0;
+	ps_numpolyobjects.value.i = 0;
+	PS_START_TIMING(ps_bsptime);
 
 	drawcount = 0;
 	validcount++;
@@ -4871,13 +4907,14 @@ void HWR_RenderFrame(INT32 viewnumber, player_t *player, boolean skybox)
 	// Recursively "render" the BSP tree.
 	HWR_RenderBSPNode((INT32)numnodes-1);
 
-	current_bsp_culling_distance = 0;
+	PS_STOP_TIMING(ps_bsptime);
 
 	if (cv_grbatching.value)
 	{
-		int dummy = 0;// the vars in RenderBatches are meant for render stats. But we don't have that stuff in this branch
-					// so that stuff could be removed...
-		HWD.pfnRenderBatches(&dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy);
+		HWD.pfnRenderBatches(&ps_hw_batchsorttime.value.p, &ps_hw_batchdrawtime.value.p,
+			&ps_hw_numpolys.value.i, &ps_hw_numverts.value.i, &ps_hw_numcalls.value.i,
+			&ps_hw_numshaders.value.i, &ps_hw_numtextures.value.i, &ps_hw_numpolyflags.value.i,
+			&ps_hw_numcolors.value.i);
 	}
 
 	// Check for new console commands.
@@ -4885,9 +4922,17 @@ void HWR_RenderFrame(INT32 viewnumber, player_t *player, boolean skybox)
 	//NetUpdate();
 
 	// Draw MD2 and sprites
+	ps_numsprites.value.i = gr_visspritecount;
+	PS_START_TIMING(ps_hw_spritesorttime);
 	HWR_SortVisSprites();
+	PS_STOP_TIMING(ps_hw_spritesorttime);
+	PS_START_TIMING(ps_hw_spritedrawtime);
 	HWR_DrawSprites();
+	PS_STOP_TIMING(ps_hw_spritedrawtime);
 
+	ps_numdrawnodes.value.i = 0;
+	ps_hw_nodesorttime.value.p = 0;
+	ps_hw_nodedrawtime.value.p = 0;
 	if (numplanes || numpolyplanes || numwalls) // Render FOFs and translucent walls after everything
 		HWR_RenderDrawNodes();
 
@@ -4931,12 +4976,14 @@ void HWR_RenderPlayerView(INT32 viewnumber, player_t *player)
 		return;
 
 	// Render the skybox if there is one.
+	PS_START_TIMING(ps_skyboxtime);
 	drewsky = false;
 	if (skybox)
 	{
 		R_SkyboxFrame(player);
 		HWR_RenderFrame(viewnumber, player, true);
 	}
+	PS_STOP_TIMING(ps_skyboxtime);
 
 	R_SetupFrame(player, false); // This can stay false because it is only used to set viewsky in r_main.c, which isn't used here
 	framecount++; // for timedemo

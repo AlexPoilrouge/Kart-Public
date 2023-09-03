@@ -2247,6 +2247,8 @@ static drawnode_t *R_CreateDrawNode(drawnode_t *link)
 	node->thickseg = NULL;
 	node->ffloor = NULL;
 	node->sprite = NULL;
+
+	ps_numdrawnodes.value.i++;
 	return node;
 }
 

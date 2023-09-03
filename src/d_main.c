@@ -77,6 +77,7 @@ int	snprintf(char *str, size_t n, const char *fmt, ...);
 #include "r_fps.h" // Frame interpolation/uncapped
 #include "keys.h"
 #include "filesrch.h" // refreshdirmenu
+#include "m_perfstats.h"
 #include "d_protocol.h"
 
 #ifdef CMAKECONFIG
@@ -437,6 +438,8 @@ static void D_Display(void)
 		// draw the view directly
 		if (cv_renderview.value && !automapactive)
 		{
+			PS_START_TIMING(ps_rendercalltime);
+
 			R_ApplyLevelInterpolators(R_UsingFrameInterpolation() ? rendertimefrac : FRACUNIT);
 
 			for (i = 0; i <= splitscreen; i++)
@@ -516,6 +519,8 @@ static void D_Display(void)
 			}
 
 			R_RestoreLevelInterpolators();
+
+			PS_STOP_TIMING(ps_rendercalltime);
 		}
 
 		if (lastdraw)
@@ -528,8 +533,13 @@ static void D_Display(void)
 			lastdraw = false;
 		}
 
+		PS_START_TIMING(ps_uitime);
 		ST_Drawer();
 		HU_Drawer();
+	}
+	else
+	{
+		PS_START_TIMING(ps_uitime);
 	}
 
 	// change gamma if needed
@@ -570,6 +580,8 @@ static void D_Display(void)
 	I_unlock_mutex(m_menu_mutex);
 #endif
 	// focus lost moved to M_Drawer
+
+	PS_STOP_TIMING(ps_uitime);
 
 	//
 	// wipe update
@@ -620,8 +632,15 @@ static void D_Display(void)
 
 		if (cv_shittyscreen.value)
 			V_DrawVhsEffect(cv_shittyscreen.value == 2);
+		
+		if (cv_perfstats.value)
+		{
+			M_DrawPerfStats();
+		}
 
+		PS_START_TIMING(ps_swaptime);
 		I_FinishUpdate(); // page flip or blit buffer
+		PS_STOP_TIMING(ps_swaptime);
 	}
 }
 

@@ -29,6 +29,7 @@
 #include "../am_map.h"
 #include "../d_player.h"
 #include "../r_defs.h"
+#include "../m_perfstats.h"
 
 #define GLENCORE
 
@@ -41,6 +42,23 @@ extern float gr_viewwidth, gr_viewheight, gr_baseviewwindowx, gr_baseviewwindowy
 extern float gr_basewindowcenterx, gr_basewindowcentery;
 
 extern FTransform atransform;
+
+// Render stats
+extern ps_metric_t ps_hw_nodesorttime;
+extern ps_metric_t ps_hw_nodedrawtime;
+extern ps_metric_t ps_hw_spritesorttime;
+extern ps_metric_t ps_hw_spritedrawtime;
+
+// Render stats for batching
+extern ps_metric_t ps_hw_numpolys;
+extern ps_metric_t ps_hw_numverts;
+extern ps_metric_t ps_hw_numcalls;
+extern ps_metric_t ps_hw_numshaders;
+extern ps_metric_t ps_hw_numtextures;
+extern ps_metric_t ps_hw_numpolyflags;
+extern ps_metric_t ps_hw_numcolors;
+extern ps_metric_t ps_hw_batchsorttime;
+extern ps_metric_t ps_hw_batchdrawtime;
 
 // hw_draw.c
 void HWR_DrawPatch(GLPatch_t *gpatch, INT32 x, INT32 y, INT32 option);
@@ -148,6 +166,7 @@ extern consvar_t cv_grsolvetjoin;
 extern consvar_t cv_grspritebillboarding;
 extern consvar_t cv_grfakecontrast;
 extern consvar_t cv_grfallbackplayermodel;
+extern consvar_t cv_grbatching;
 extern consvar_t cv_grrenderdistance;
 
 extern CV_PossibleValue_t granisotropicmode_cons_t[];
